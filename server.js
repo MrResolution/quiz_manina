@@ -1,5 +1,7 @@
+require('dotenv').config();
 const express = require('express');
-const { Pool } = require('pg');
+const { Pool, neonConfig } = require('@neondatabase/serverless');
+const ws = require('ws');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
@@ -7,6 +9,9 @@ const fs = require('fs');
 
 const app = express();
 const PORT = 8080;
+
+// Configure Neon serverless to use ws for WebSockets in Node environment
+neonConfig.webSocketConstructor = ws;
 
 // PostgreSQL Connection Pool Configuration
 const pool = new Pool({
@@ -456,6 +461,164 @@ app.get('/api/leaderboard', async (req, res) => {
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: 'Server error fetching leaderboard.' });
+  }
+});
+
+// ==========================================
+// MULTIPLAYER ROOM ENDPOINTS
+// ==========================================
+
+// Host a Room
+app.post('/api/rooms/host', async (req, res) => {
+  const { quizId, hostUsername } = req.body;
+  if (!quizId || !hostUsername) {
+    return res.status(400).json({ error: 'Quiz ID and Host Username are required.' });
+  }
+  
+  try {
+    let pin;
+    let unique = false;
+    while (!unique) {
+      pin = Math.floor(100000 + Math.random() * 900000).toString();
+      const check = await pool.query('SELECT pin FROM rooms WHERE pin = $1', [pin]);
+      if (check.rows.length === 0) {
+        unique = true;
+      }
+    }
+    
+    await pool.query(
+      'INSERT INTO rooms (pin, quiz_id, host_username, status, current_question_index) VALUES ($1, $2, $3, $4, 0)',
+      [pin, quizId, hostUsername, 'lobby']
+    );
+    
+    res.status(201).json({ pin });
+  } catch (error) {
+    console.error('Error hosting room:', error);
+    res.status(500).json({ error: 'Server error hosting room.' });
+  }
+});
+
+// Join a Room
+app.post('/api/rooms/join', async (req, res) => {
+  const { pin, username } = req.body;
+  if (!pin || !username) {
+    return res.status(400).json({ error: 'PIN and Username are required.' });
+  }
+  
+  try {
+    const roomResult = await pool.query('SELECT * FROM rooms WHERE pin = $1', [pin]);
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Quiz room not found.' });
+    }
+    
+    const room = roomResult.rows[0];
+    if (room.status !== 'lobby') {
+      return res.status(400).json({ error: 'Quiz has already started or finished.' });
+    }
+    
+    await pool.query(
+      'INSERT INTO room_participants (room_pin, username, score) VALUES ($1, $2, 0) ON CONFLICT (room_pin, username) DO NOTHING',
+      [pin, username]
+    );
+    
+    res.json({ success: true, quizId: room.quiz_id });
+  } catch (error) {
+    console.error('Error joining room:', error);
+    res.status(500).json({ error: 'Server error joining room.' });
+  }
+});
+
+// Get Room Status
+app.get('/api/rooms/status/:pin', async (req, res) => {
+  const { pin } = req.params;
+  try {
+    const roomResult = await pool.query('SELECT * FROM rooms WHERE pin = $1', [pin]);
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room not found.' });
+    }
+    
+    const room = roomResult.rows[0];
+    
+    const participantsResult = await pool.query(
+      'SELECT username, score FROM room_participants WHERE room_pin = $1 ORDER BY score DESC, username ASC',
+      [pin]
+    );
+    
+    res.json({
+      pin: room.pin,
+      quizId: room.quiz_id,
+      hostUsername: room.host_username,
+      status: room.status,
+      currentQuestionIndex: room.current_question_index,
+      participants: participantsResult.rows
+    });
+  } catch (error) {
+    console.error('Error checking room status:', error);
+    res.status(500).json({ error: 'Server error checking room status.' });
+  }
+});
+
+// Start Room Quiz
+app.post('/api/rooms/start/:pin', async (req, res) => {
+  const { pin } = req.params;
+  try {
+    await pool.query('UPDATE rooms SET status = $1, current_question_index = 0 WHERE pin = $2', ['active', pin]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error starting room:', error);
+    res.status(500).json({ error: 'Server error starting room.' });
+  }
+});
+
+// Advance Question
+app.post('/api/rooms/next-question/:pin', async (req, res) => {
+  const { pin } = req.params;
+  const { maxQuestions } = req.body;
+  try {
+    const roomResult = await pool.query('SELECT current_question_index FROM rooms WHERE pin = $1', [pin]);
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room not found.' });
+    }
+    
+    const nextIndex = roomResult.rows[0].current_question_index + 1;
+    if (nextIndex >= maxQuestions) {
+      await pool.query('UPDATE rooms SET status = $1 WHERE pin = $2', ['finished', pin]);
+    } else {
+      await pool.query('UPDATE rooms SET current_question_index = $1 WHERE pin = $2', [nextIndex, pin]);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error advancing question:', error);
+    res.status(500).json({ error: 'Server error advancing question.' });
+  }
+});
+
+// Submit Participant Answer
+app.post('/api/rooms/submit-answer/:pin', async (req, res) => {
+  const { pin } = req.params;
+  const { username, scoreGained } = req.body;
+  try {
+    await pool.query(
+      'UPDATE room_participants SET score = score + $1 WHERE room_pin = $2 AND username = $3',
+      [scoreGained || 0, pin, username]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error submitting answer:', error);
+    res.status(500).json({ error: 'Server error submitting answer.' });
+  }
+});
+
+// End Room Quiz
+app.post('/api/rooms/end/:pin', async (req, res) => {
+  const { pin } = req.params;
+  try {
+    await pool.query('UPDATE rooms SET status = $1 WHERE pin = $2', ['finished', pin]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error ending room:', error);
+    res.status(500).json({ error: 'Server error ending room.' });
   }
 });
 

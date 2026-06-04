@@ -2337,3 +2337,55 @@ header {
   font-family: monospace;
 }
 
+/* --- MULTIPLAYER ROOM CUSTOM STYLES --- */
+.lobby-players-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.lobby-players-grid .user-profile-badge {
+  animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.glow {
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+}
+
+.pulse-loader {
+  animation: pulse-glow 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0% {
+    transform: scale(0.98);
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.3);
+  }
+  70% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 20px rgba(139, 92, 246, 0);
+  }
+  100% {
+    transform: scale(0.98);
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0);
+  }
+}
+
+.host-game-dashboard-grid {
+  margin-top: 24px;
+}
+
+.host-scoreboard {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--surface-border);
+  padding: 20px;
+}
+
+.host-status-panel {
+  background: rgba(139, 92, 246, 0.05);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  padding: 24px;
+}
+

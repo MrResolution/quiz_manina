@@ -132,6 +132,16 @@
 
           <!-- Sidebar Right Column -->
           <div class="dashboard-sidebar">
+            <!-- Join Live Quiz Widget -->
+            <div class="sidebar-panel glass Join-live-panel" style="border: 1px solid rgba(139, 92, 246, 0.4); background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(236, 72, 153, 0.05) 100%);">
+              <h3 class="sidebar-title"><i data-lucide="users" size="20" style="color: #ec4899;"></i>Join Live Quiz</h3>
+              <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Enter the 6-digit PIN code to join a live session.</p>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="join-pin-input" class="creator-input" style="padding: 8px 12px; font-size: 14px; text-align: center; letter-spacing: 2px; font-weight: bold; width: 100%;" placeholder="PIN Code" maxlength="6">
+                <button class="btn btn-primary" id="join-room-btn" style="width: auto; padding: 8px 16px; font-size: 13px; white-space: nowrap;">Join</button>
+              </div>
+            </div>
+
             <!-- Leaderboard Mini Widget -->
             <div class="sidebar-panel glass">
               <h3 class="sidebar-title"><i data-lucide="trophy" size="20" style="color: #f59e0b;"></i>Top Competitors</h3>
@@ -511,6 +521,106 @@
         </div>
       </section>
 
+      <!-- 9. HOST LOBBY VIEW -->
+      <section id="host-lobby-view" class="view">
+        <div class="full-width-panel glass">
+          <div class="lobby-header" style="text-align: center; margin-bottom: 32px;">
+            <h1 class="text-gradient">Host Live Quiz Lobby</h1>
+            <p>Share the PIN below with your students so they can join this live session.</p>
+          </div>
+          
+          <div class="pin-display-container glass glow" style="text-align: center; padding: 24px; max-width: 400px; margin: 0 auto 32px; border: 2px solid var(--primary-color); border-radius: var(--radius-lg);">
+            <div style="font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted);">JOIN PIN</div>
+            <div id="host-pin-code" style="font-size: 54px; font-weight: 900; letter-spacing: 8px; color: var(--success-color); font-family: var(--font-heading); text-shadow: 0 0 15px rgba(16, 185, 129, 0.4);">------</div>
+          </div>
+
+          <div class="participants-section" style="max-width: 600px; margin: 0 auto 32px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h3 style="font-size: 18px;"><i data-lucide="users" style="color: var(--accent-blue);"></i> Joined Players (<span id="host-player-count">0</span>)</h3>
+              <span style="font-size: 12px; color: var(--text-muted); font-style: italic;">Waiting for players...</span>
+            </div>
+            <div id="host-players-list" class="lobby-players-grid" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+              <!-- Dynamically populated student badges -->
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: center; gap: 16px;">
+            <button class="btn btn-secondary" style="width: auto;" id="host-cancel-btn"><i data-lucide="trash-2"></i> Cancel Session</button>
+            <button class="btn btn-primary" style="width: auto;" id="host-start-btn" disabled><i data-lucide="play"></i> Start Quiz</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10. HOST GAME VIEW -->
+      <section id="host-game-view" class="view">
+        <div class="full-width-panel glass">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--surface-border); padding-bottom: 16px; margin-bottom: 24px;">
+            <div>
+              <h2 id="host-game-quiz-title" class="text-gradient">Quiz Title</h2>
+              <p style="font-size: 14px; color: var(--text-muted);">Question <span id="host-game-q-num">1</span> of <span id="host-game-q-total">10</span></p>
+            </div>
+            <div style="text-align: right;">
+              <span class="difficulty-badge" style="background: rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.2); font-weight: bold; padding: 6px 12px;">Live PIN: <span id="host-game-pin-display" style="color: var(--success-color);">------</span></span>
+            </div>
+          </div>
+
+          <div class="host-question-card glass" style="padding: 24px; border-radius: var(--radius-md); margin-bottom: 24px; text-align: center;">
+            <div style="font-size: 14px; text-transform: uppercase; color: var(--accent-blue); margin-bottom: 8px;">Active Question</div>
+            <h2 id="host-game-question-text" style="font-size: 22px; font-weight: 700;">Active Question Text</h2>
+          </div>
+
+          <div class="host-game-dashboard-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px;">
+            <div class="host-scoreboard glass" style="padding: 20px; border-radius: var(--radius-md);">
+              <h3 style="margin-bottom: 16px; font-size: 16px; border-bottom: 1px solid var(--surface-border); padding-bottom: 8px;"><i data-lucide="award" style="color: var(--warning-color);"></i> Live Leaderboard</h3>
+              <div id="host-game-scores-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Joined players sorted by score -->
+              </div>
+            </div>
+
+            <div class="host-status-panel glass" style="padding: 20px; border-radius: var(--radius-md); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 16px;">
+              <div>
+                <h4 style="margin-bottom: 8px;">Live Room Status</h4>
+                <div style="font-size: 14px; color: var(--success-color); font-weight: bold;">Active Game</div>
+              </div>
+              <button class="btn btn-primary" id="host-game-next-btn" style="width: auto;"><i data-lucide="arrow-right"></i> Next Question</button>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <button class="btn btn-secondary" style="width: auto;" id="host-game-end-btn"><i data-lucide="x-circle"></i> End Session</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11. STUDENT LOBBY VIEW -->
+      <section id="student-lobby-view" class="view">
+        <div class="full-width-panel glass" style="text-align: center; padding: 48px;">
+          <div class="pulse-loader" style="width: 80px; height: 80px; margin: 0 auto 24px; background: rgba(139, 92, 246, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <i data-lucide="loader" class="spin-icon" style="color: var(--primary-color); width: 36px; height: 36px; animation: spin 2s linear infinite;">
+              <style>
+                @keyframes spin { 100% { transform: rotate(360deg); } }
+              </style>
+            </i>
+          </div>
+          <h1 class="text-gradient">Waiting for Teacher...</h1>
+          <p style="margin-bottom: 32px; font-size: 16px;">You have joined the lobby for: <strong id="student-lobby-quiz-title" style="color: var(--accent-blue);">---</strong></p>
+          
+          <div class="pin-display-container glass" style="display: inline-block; padding: 12px 24px; border-radius: var(--radius-md); margin-bottom: 32px;">
+            <span style="font-size: 13px; color: var(--text-muted);">Session PIN:</span>
+            <strong id="student-lobby-pin" style="color: var(--success-color); font-size: 18px; margin-left: 8px;">------</strong>
+          </div>
+
+          <div style="max-width: 500px; margin: 0 auto 32px;">
+            <h3 style="margin-bottom: 12px; font-size: 15px;">Joined Students</h3>
+            <div id="student-lobby-players-list" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+              <!-- List of other joined students -->
+            </div>
+          </div>
+
+          <button class="btn btn-secondary" style="width: auto;" id="student-lobby-leave-btn"><i data-lucide="log-out"></i> Leave Lobby</button>
+        </div>
+      </section>
+
     </main>
 
   </div>
@@ -595,10 +705,6 @@
           Sign In <i data-lucide="log-in"></i>
         </button>
 
-        <p class="login-help-text">
-          Demo Student: <code>student</code> / <code>password</code><br>
-          Demo Teacher: <code>teacher</code> / <code>password</code>
-        </p>
       </form>
 
       <!-- SIGN UP FORM -->

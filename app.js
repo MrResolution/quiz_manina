@@ -85,6 +85,16 @@ let state = {
     tabSwitchCount: 0        // anti-cheat tab switch counter
   },
   attemptHistory: [],        // persisted array of past attempts
+  multiplayer: {
+    active: false,
+    role: null, // 'host' or 'student'
+    pin: null,
+    status: 'lobby',
+    pollInterval: null,
+    quiz: null,
+    currentQuestionIndex: 0,
+    participants: []
+  },
   currentView: "dashboard-view"
 };
 
@@ -112,6 +122,7 @@ async function initApp() {
   setupCSVHandlers();
   setupHistoryHandlers();
   setupLoginHandlers();
+  setupMultiplayerHandlers();
   
   // Render Lucide icons
   lucide.createIcons();
@@ -324,6 +335,15 @@ function switchView(viewId) {
     clearInterval(state.gameplay.timerInterval);
   }
 
+  // Clear multiplayer polling if navigating away
+  if (state.multiplayer && state.multiplayer.active) {
+    if (viewId !== "host-lobby-view" && viewId !== "host-game-view" && viewId !== "student-lobby-view" && viewId !== "arena-view") {
+      clearInterval(state.multiplayer.pollInterval);
+      state.multiplayer.active = false;
+      state.multiplayer.pin = null;
+    }
+  }
+
   // Update navbar styling
   const navItems = document.querySelectorAll(".nav-item");
   navItems.forEach(item => {
@@ -378,6 +398,13 @@ function renderDashboard() {
     const qCount = quiz.questions.length;
     const minutes = Math.ceil((qCount * quiz.timeLimit) / 60);
     
+    const isTeacher = state.user.role === "teacher";
+    const hostButtonHtml = isTeacher 
+      ? `<button class="btn btn-secondary host-quiz-btn" data-id="${quiz.id}" style="margin-top: 8px; width: 100%;">
+           Host Live Quiz <i data-lucide="users" size="16"></i>
+         </button>`
+      : "";
+
     card.innerHTML = `
       <div class="quiz-meta-top">
         <span class="quiz-category">${quiz.category}</span>
@@ -403,6 +430,7 @@ function renderDashboard() {
       <button class="btn btn-primary start-quiz-btn" data-id="${quiz.id}">
         Start Challenge <i data-lucide="play" size="16"></i>
       </button>
+      ${hostButtonHtml}
     `;
     quizzesContainer.appendChild(card);
   });
@@ -412,6 +440,14 @@ function renderDashboard() {
     btn.addEventListener("click", () => {
       const quizId = btn.getAttribute("data-id");
       startQuiz(quizId);
+    });
+  });
+
+  // Attach host listeners
+  document.querySelectorAll(".host-quiz-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const quizId = btn.getAttribute("data-id");
+      hostQuiz(quizId);
     });
   });
 }
@@ -926,14 +962,32 @@ function validateAnswer(selectedIdx) {
 
   // Modify action button
   const actionBtn = document.getElementById("arena-action-btn");
-  const isLastQuestion = qIdx === questions.length - 1;
-  if (isLastQuestion) {
-    actionBtn.innerHTML = `Finish Quiz <i data-lucide="award"></i>`;
+  
+  if (state.multiplayer && state.multiplayer.active) {
+    actionBtn.innerHTML = `Waiting for Host <i data-lucide="loader"></i>`;
+    actionBtn.disabled = true;
+    lucide.createIcons();
+    
+    // Submit answer to backend
+    const scoreGained = isCorrect ? (100 + (Math.round(Math.max(0, 1 - ((Date.now() - state.gameplay.questionStartTime) / 1000 / quiz.timeLimit)) * 50))) : 0;
+    fetch(`/api/rooms/submit-answer/${state.multiplayer.pin}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.user.username,
+        scoreGained: scoreGained
+      })
+    }).catch(err => console.error("Error submitting multiplayer score:", err));
   } else {
-    actionBtn.innerHTML = `Next Question <i data-lucide="arrow-right"></i>`;
+    const isLastQuestion = qIdx === questions.length - 1;
+    if (isLastQuestion) {
+      actionBtn.innerHTML = `Finish Quiz <i data-lucide="award"></i>`;
+    } else {
+      actionBtn.innerHTML = `Next Question <i data-lucide="arrow-right"></i>`;
+    }
+    actionBtn.disabled = false;
+    lucide.createIcons();
   }
-  actionBtn.disabled = false;
-  lucide.createIcons();
 }
 
 // --- FINISH QUIZ (RESULTS CALCULATIONS) ---
@@ -1993,4 +2047,473 @@ function setupLoginHandlers() {
       applyRoleAccessControl();
     }
   });
+}
+
+// ==========================================
+// MULTIPLAYER ROOMS & GAMEPLAY LOGIC
+// ==========================================
+
+function setupMultiplayerHandlers() {
+  const joinBtn = document.getElementById("join-room-btn");
+  if (joinBtn) {
+    joinBtn.addEventListener("click", () => {
+      const pinVal = document.getElementById("join-pin-input").value.trim();
+      if (pinVal.length !== 6 || isNaN(pinVal)) {
+        showToast("Please enter a valid 6-digit PIN code.", "warning");
+        return;
+      }
+      joinQuizRoom(pinVal);
+    });
+  }
+
+  const cancelHostBtn = document.getElementById("host-cancel-btn");
+  if (cancelHostBtn) {
+    cancelHostBtn.addEventListener("click", () => {
+      cancelHostedRoom();
+    });
+  }
+
+  const startHostBtn = document.getElementById("host-start-btn");
+  if (startHostBtn) {
+    startHostBtn.addEventListener("click", () => {
+      startHostedRoom();
+    });
+  }
+
+  const nextHostBtn = document.getElementById("host-game-next-btn");
+  if (nextHostBtn) {
+    nextHostBtn.addEventListener("click", () => {
+      advanceHostGameQuestion();
+    });
+  }
+
+  const endHostBtn = document.getElementById("host-game-end-btn");
+  if (endHostBtn) {
+    endHostBtn.addEventListener("click", () => {
+      endHostedRoom();
+    });
+  }
+
+  const leaveLobbyBtn = document.getElementById("student-lobby-leave-btn");
+  if (leaveLobbyBtn) {
+    leaveLobbyBtn.addEventListener("click", () => {
+      leaveStudentLobby();
+    });
+  }
+}
+
+async function hostQuiz(quizId) {
+  const hostUsername = state.user.username;
+  try {
+    const res = await fetch('/api/rooms/host', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quizId, hostUsername })
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      showToast(data.error || "Failed to host quiz room.", "error");
+      return;
+    }
+    
+    const { pin } = await res.json();
+    
+    state.multiplayer = {
+      active: true,
+      role: 'host',
+      pin: pin,
+      status: 'lobby',
+      quiz: state.quizzes.find(q => q.id === quizId),
+      currentQuestionIndex: 0,
+      participants: []
+    };
+    
+    document.getElementById("host-pin-code").textContent = pin;
+    document.getElementById("host-player-count").textContent = "0";
+    document.getElementById("host-players-list").innerHTML = "";
+    document.getElementById("host-start-btn").disabled = true;
+    
+    switchView("host-lobby-view");
+    startMultiplayerPolling();
+    showToast(`Quiz hosted! PIN: ${pin}`, "success");
+  } catch (error) {
+    console.error("Error hosting room:", error);
+    showToast("Connection to server failed.", "error");
+  }
+}
+
+async function joinQuizRoom(pin) {
+  const username = state.user.username || "You";
+  try {
+    const res = await fetch('/api/rooms/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin, username })
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      showToast(data.error || "Failed to join quiz room.", "error");
+      return;
+    }
+    
+    const { quizId } = await res.json();
+    
+    state.multiplayer = {
+      active: true,
+      role: 'student',
+      pin: pin,
+      status: 'lobby',
+      quiz: state.quizzes.find(q => q.id === quizId),
+      currentQuestionIndex: 0,
+      participants: []
+    };
+    
+    document.getElementById("student-lobby-quiz-title").textContent = state.multiplayer.quiz ? state.multiplayer.quiz.title : "Live Quiz";
+    document.getElementById("student-lobby-pin").textContent = pin;
+    document.getElementById("student-lobby-players-list").innerHTML = "";
+    
+    switchView("student-lobby-view");
+    startMultiplayerPolling();
+    showToast("Joined live lobby successfully!", "success");
+  } catch (error) {
+    console.error("Error joining room:", error);
+    showToast("Connection to server failed.", "error");
+  }
+}
+
+function startMultiplayerPolling() {
+  if (state.multiplayer.pollInterval) {
+    clearInterval(state.multiplayer.pollInterval);
+  }
+  
+  state.multiplayer.pollInterval = setInterval(async () => {
+    if (!state.multiplayer.pin) {
+      clearInterval(state.multiplayer.pollInterval);
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/rooms/status/${state.multiplayer.pin}`);
+      if (!res.ok) {
+        clearInterval(state.multiplayer.pollInterval);
+        showToast("Live session was closed by the host.", "warning");
+        leaveMultiplayerSession();
+        return;
+      }
+      
+      const statusData = await res.json();
+      state.multiplayer.participants = statusData.participants;
+      state.multiplayer.status = statusData.status;
+      state.multiplayer.currentQuestionIndex = statusData.currentQuestionIndex;
+      
+      if (state.multiplayer.role === 'host') {
+        updateHostLobbyUI();
+        if (state.multiplayer.status === 'active' && state.currentView === 'host-lobby-view') {
+          startHostGameplay();
+        }
+      } else {
+        updateStudentLobbyUI();
+        
+        if (state.multiplayer.status === 'active') {
+          if (state.currentView !== 'arena-view') {
+            startStudentGameplay();
+          } else {
+            if (state.gameplay.currentQuestionIndex !== state.multiplayer.currentQuestionIndex) {
+              loadSyncedStudentQuestion();
+            }
+          }
+        } else if (state.multiplayer.status === 'finished') {
+          showRoomPodium();
+        }
+      }
+    } catch (e) {
+      console.error("Multiplayer polling error:", e);
+    }
+  }, 2000);
+}
+
+function updateHostLobbyUI() {
+  const countEl = document.getElementById("host-player-count");
+  const listEl = document.getElementById("host-players-list");
+  const startBtn = document.getElementById("host-start-btn");
+  
+  if (countEl) countEl.textContent = state.multiplayer.participants.length;
+  if (listEl) {
+    listEl.innerHTML = state.multiplayer.participants.map(p => `
+      <div class="user-profile-badge" style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); font-weight: 600; padding: 8px 16px;">
+        <span class="user-avatar" style="width: 24px; height: 24px; font-size: 11px; margin-right: 6px;">${p.username[0].toUpperCase()}</span>
+        ${p.username}
+      </div>
+    `).join("");
+  }
+  if (startBtn) {
+    startBtn.disabled = state.multiplayer.participants.length === 0;
+  }
+}
+
+function updateStudentLobbyUI() {
+  const listEl = document.getElementById("student-lobby-players-list");
+  if (listEl) {
+    listEl.innerHTML = state.multiplayer.participants.map(p => `
+      <div class="user-profile-badge" style="background: rgba(236, 72, 153, 0.1); border: 1px solid rgba(236, 72, 153, 0.2); padding: 6px 12px; font-size: 12px;">
+        ${p.username}
+      </div>
+    `).join("");
+  }
+}
+
+async function cancelHostedRoom() {
+  if (confirm("Are you sure you want to cancel this live session?")) {
+    try {
+      await fetch(`/api/rooms/end/${state.multiplayer.pin}`, { method: 'POST' });
+    } catch (e) {}
+    leaveMultiplayerSession();
+  }
+}
+
+async function startHostedRoom() {
+  try {
+    const res = await fetch(`/api/rooms/start/${state.multiplayer.pin}`, { method: 'POST' });
+    if (res.ok) {
+      startHostGameplay();
+    }
+  } catch (error) {
+    console.error("Error starting room:", error);
+  }
+}
+
+function startHostGameplay() {
+  state.multiplayer.status = 'active';
+  
+  document.getElementById("host-game-quiz-title").textContent = state.multiplayer.quiz.title;
+  document.getElementById("host-game-pin-display").textContent = state.multiplayer.pin;
+  document.getElementById("host-game-q-total").textContent = state.multiplayer.quiz.questions.length;
+  document.getElementById("host-game-next-btn").style.display = "inline-flex";
+  
+  switchView("host-game-view");
+  loadHostQuestion();
+}
+
+function loadHostQuestion() {
+  const qIdx = state.multiplayer.currentQuestionIndex;
+  const quiz = state.multiplayer.quiz;
+  const questionObj = quiz.questions[qIdx];
+  
+  document.getElementById("host-game-q-num").textContent = qIdx + 1;
+  document.getElementById("host-game-question-text").textContent = questionObj.question;
+  
+  updateHostLiveScores();
+}
+
+function updateHostLiveScores() {
+  const scoreListEl = document.getElementById("host-game-scores-list");
+  if (scoreListEl) {
+    scoreListEl.innerHTML = state.multiplayer.participants.map((p, idx) => `
+      <div class="leaderboard-row" style="padding: 10px 16px;">
+        <span class="leaderboard-rank rank-${idx + 1}">${idx + 1}</span>
+        <div class="leaderboard-avatar">${p.username.slice(0, 2).toUpperCase()}</div>
+        <div class="leaderboard-name">${p.username}</div>
+        <span class="leaderboard-score" style="color: var(--accent-blue);">${p.score} pts</span>
+      </div>
+    `).join("");
+  }
+  
+  const responsesCountEl = document.getElementById("host-game-responses-count");
+  if (responsesCountEl) {
+    responsesCountEl.textContent = state.multiplayer.participants.length;
+  }
+}
+
+async function advanceHostGameQuestion() {
+  const maxQ = state.multiplayer.quiz.questions.length;
+  try {
+    const res = await fetch(`/api/rooms/next-question/${state.multiplayer.pin}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ maxQuestions: maxQ })
+    });
+    
+    if (res.ok) {
+      const statusRes = await fetch(`/api/rooms/status/${state.multiplayer.pin}`);
+      const statusData = await statusRes.json();
+      state.multiplayer.currentQuestionIndex = statusData.currentQuestionIndex;
+      state.multiplayer.status = statusData.status;
+      
+      if (state.multiplayer.status === 'finished') {
+        endHostedRoom();
+      } else {
+        loadHostQuestion();
+      }
+    }
+  } catch (error) {
+    console.error("Error advancing question:", error);
+  }
+}
+
+async function endHostedRoom() {
+  try {
+    await fetch(`/api/rooms/end/${state.multiplayer.pin}`, { method: 'POST' });
+    showHostPodium();
+  } catch (error) {
+    console.error("Error ending room:", error);
+  }
+}
+
+function showHostPodium() {
+  clearInterval(state.multiplayer.pollInterval);
+  
+  const listEl = document.getElementById("host-game-scores-list");
+  if (listEl) {
+    listEl.innerHTML = `
+      <div style="text-align: center; padding: 24px; width: 100%;">
+        <h2 style="color: var(--warning-color); font-size: 26px; margin-bottom: 16px;">🏆 Live Quiz Podium 🏆</h2>
+        <div style="display: flex; flex-direction: column; gap: 10px; max-width: 400px; margin: 0 auto;">
+          ${state.multiplayer.participants.map((p, idx) => `
+            <div class="leaderboard-row" style="padding: 12px 20px; background: rgba(255, 255, 255, 0.05); width: 100%; box-sizing: border-box;">
+              <span class="leaderboard-rank rank-${idx + 1}" style="font-size: 16px;">#${idx + 1}</span>
+              <div class="leaderboard-name" style="font-weight: bold;">${p.username}</div>
+              <span class="leaderboard-score" style="font-size: 14px; color: var(--success-color);">${p.score} pts</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+  
+  document.getElementById("host-game-next-btn").style.display = "none";
+}
+
+function startStudentGameplay() {
+  const quiz = state.multiplayer.quiz;
+  if (!quiz) return;
+  
+  state.gameplay.activeQuiz = quiz;
+  state.gameplay.shuffledQuestions = JSON.parse(JSON.stringify(quiz.questions));
+  
+  state.gameplay.currentQuestionIndex = state.multiplayer.currentQuestionIndex;
+  state.gameplay.score = 0;
+  state.gameplay.correctCount = 0;
+  state.gameplay.streak = 0;
+  state.gameplay.maxStreak = 0;
+  state.gameplay.answersLog = [];
+  state.gameplay.startTime = Date.now();
+  state.gameplay.selectedAnswers = {};
+  
+  document.getElementById("arena-quiz-title").textContent = quiz.title + " (Live)";
+  document.getElementById("arena-total-q-num").textContent = quiz.questions.length;
+  
+  switchView("arena-view");
+  loadSyncedStudentQuestion();
+}
+
+function loadSyncedStudentQuestion() {
+  const qIdx = state.multiplayer.currentQuestionIndex;
+  state.gameplay.currentQuestionIndex = qIdx;
+  
+  const questionObj = state.gameplay.shuffledQuestions[qIdx];
+  
+  document.getElementById("arena-current-q-num").textContent = qIdx + 1;
+  document.getElementById("arena-score-val").textContent = `${state.gameplay.score} XP`;
+  
+  const progressPercent = (qIdx / state.gameplay.shuffledQuestions.length) * 100;
+  document.getElementById("arena-progress-bar").style.width = `${progressPercent}%`;
+  
+  document.getElementById("arena-question-tag").textContent = state.multiplayer.quiz.category;
+  document.getElementById("arena-question-text").textContent = questionObj.question;
+  
+  const optionsContainer = document.getElementById("arena-options-list");
+  optionsContainer.innerHTML = "";
+  
+  const qType = questionObj.type || "mcq";
+  
+  if (qType === "truefalse") {
+    const row = document.createElement("div");
+    row.className = "tf-options-row";
+    ["True", "False"].forEach((label, idx) => {
+      const btn = document.createElement("button");
+      btn.className = "tf-btn";
+      btn.innerHTML = `<i data-lucide="${idx === 0 ? 'check-circle' : 'x-circle'}" size="24"></i> ${label}`;
+      btn.addEventListener("click", () => selectOption(idx));
+      row.appendChild(btn);
+    });
+    optionsContainer.appendChild(row);
+  } else if (qType === "short_answer") {
+    const wrapper = document.createElement("div");
+    wrapper.className = "short-answer-wrapper";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "short-answer-input";
+    input.id = "arena-short-answer-input";
+    input.placeholder = "Type your answer here...";
+    input.addEventListener("input", () => {
+      selectedOptionIdx = input.value.trim();
+      document.getElementById("arena-action-btn").disabled = !input.value.trim();
+    });
+    wrapper.appendChild(input);
+    optionsContainer.appendChild(wrapper);
+  } else {
+    questionObj.options.forEach((optionText, idx) => {
+      const letter = String.fromCharCode(65 + idx);
+      const btn = document.createElement("button");
+      btn.className = "option-btn";
+      btn.innerHTML = `
+        <span class="option-letter">${letter}</span>
+        <span class="option-text">${optionText}</span>
+      `;
+      btn.addEventListener("click", () => selectOption(idx));
+      optionsContainer.appendChild(btn);
+    });
+  }
+  
+  document.getElementById("arena-explanation-panel").style.display = "none";
+  
+  const actionBtn = document.getElementById("arena-action-btn");
+  actionBtn.innerHTML = `Submit Answer <i data-lucide="check"></i>`;
+  actionBtn.disabled = true;
+  selectedOptionIdx = -1;
+  lucide.createIcons();
+  
+  state.gameplay.timeLeft = state.multiplayer.quiz.timeLimit;
+  startTimer();
+}
+
+async function leaveStudentLobby() {
+  leaveMultiplayerSession();
+}
+
+function leaveMultiplayerSession() {
+  clearInterval(state.multiplayer.pollInterval);
+  state.multiplayer = {
+    active: false,
+    role: null,
+    pin: null,
+    status: 'lobby',
+    pollInterval: null,
+    quiz: null,
+    currentQuestionIndex: 0,
+    participants: []
+  };
+  switchView("dashboard-view");
+}
+
+function showRoomPodium() {
+  clearInterval(state.multiplayer.pollInterval);
+  
+  // Show student success/podium screen
+  const explanationPanel = document.getElementById("arena-explanation-panel");
+  const explanationText = document.getElementById("arena-explanation-text");
+  
+  explanationPanel.style.display = "block";
+  explanationText.innerHTML = `
+    <div style="text-align: center; padding: 16px;">
+      <h3 style="color: var(--success-color); margin-bottom: 8px;">🎉 Live Quiz Finished! 🎉</h3>
+      <p>The host has ended the session. Thank you for playing!</p>
+      <button class="btn btn-secondary" onclick="leaveMultiplayerSession()" style="margin-top: 16px; width: auto; margin-left: auto; margin-right: auto;">Back to Dashboard</button>
+    </div>
+  `;
+  
+  // Disable option controls
+  document.getElementById("arena-action-btn").style.display = "none";
 }
