@@ -109,6 +109,18 @@ async function initApp() {
   await loadQuizzes();
   await loadAttemptHistory();
   
+  const activeUser = localStorage.getItem("quizmania_active_user");
+  if (activeUser) {
+    const hash = window.location.hash.replace("#", "");
+    if (hash && document.getElementById(hash) && document.getElementById(hash).classList.contains("view")) {
+      switchView(hash);
+    } else {
+      switchView("dashboard-view");
+    }
+  } else {
+    document.getElementById("login-overlay").classList.add("active");
+  }
+
   renderDashboard();
   renderMiniLeaderboard();
   renderMiniBadges();
@@ -342,9 +354,43 @@ function setupNavigation() {
   document.getElementById("sidebar-view-badges-btn").addEventListener("click", () => {
     switchView("badges-view");
   });
+
+  // Handle Back/Forward browser buttons via hash change
+  window.addEventListener("hashchange", () => {
+    const hash = window.location.hash.replace("#", "");
+    const activeUser = localStorage.getItem("quizmania_active_user");
+    if (activeUser) {
+      if (hash && hash !== state.currentView) {
+        const viewEl = document.getElementById(hash);
+        if (viewEl && viewEl.classList.contains("view")) {
+          switchView(hash);
+        }
+      } else if (!hash) {
+        switchView("dashboard-view");
+      }
+    } else {
+      document.getElementById("login-overlay").classList.add("active");
+    }
+  });
 }
 
 function switchView(viewId) {
+  const activeUser = localStorage.getItem("quizmania_active_user");
+  if (!activeUser) {
+    document.getElementById("login-overlay").classList.add("active");
+    return;
+  }
+  document.getElementById("login-overlay").classList.remove("active");
+
+  if (!viewId) {
+    viewId = "dashboard-view";
+  }
+
+  // Update browser hash
+  if (window.location.hash !== `#${viewId}`) {
+    window.location.hash = viewId;
+  }
+
   // Clear active timers if leaving arena
   if (state.currentView === "arena-view" && viewId !== "arena-view") {
     clearInterval(state.gameplay.timerInterval);
@@ -2173,6 +2219,9 @@ function setupLoginHandlers() {
       document.getElementById("l-password").value = "";
       
       applyRoleAccessControl();
+      
+      // Clear hash on logout
+      window.location.hash = "";
     }
   });
 }
