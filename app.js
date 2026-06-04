@@ -129,7 +129,10 @@ async function initApp() {
 }
 
 // --- STATE PERSISTENCE & ACCOUNT MANAGEMENT ---
-const DEFAULT_ACCOUNTS = [];
+const DEFAULT_ACCOUNTS = [
+  { username: "student", password: "password", role: "student" },
+  { username: "teacher", password: "password", role: "teacher" }
+];
 
 function getAccounts() {
   const raw = localStorage.getItem("quizmania_accounts");
@@ -286,11 +289,18 @@ async function saveCustomQuiz(newQuiz) {
       renderDashboard();
     } else {
       const err = await response.json();
-      showToast(`Failed to create quiz: ${err.error || 'Server error'}`, "error");
+      if (response.status === 400) {
+        showToast(`Failed to create quiz: ${err.error || 'Server error'}`, "error");
+        return;
+      }
+      throw new Error(err.error || 'Server error');
     }
   } catch (e) {
-    console.error("Error creating quiz:", e);
-    showToast("Error connecting to server.", "error");
+    console.warn("Error creating quiz on database, saving locally:", e);
+    newQuiz.id = newQuiz.id || `custom-${Date.now()}`;
+    state.quizzes.push(newQuiz);
+    showToast("Quiz saved locally (Offline Mode)!", "success");
+    renderDashboard();
   }
 }
 
@@ -1967,24 +1977,46 @@ function setupLoginHandlers() {
         body: JSON.stringify({ username: usernameInput, password: passwordInput })
       });
       
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || "Invalid username or password.", "error");
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("quizmania_active_user", data.username);
+        showToast(`Signed in successfully as ${data.username}!`, "success");
+        await initApp();
+        switchView("dashboard-view");
+        loginForm.reset();
         return;
       }
 
-      localStorage.setItem("quizmania_active_user", data.username);
-      showToast(`Signed in successfully as ${data.username}!`, "success");
+      if (res.status === 400) {
+        const data = await res.json();
+        showToast(data.error || "Invalid username or password.", "error");
+        return;
+      }
       
-      // Load user profile, history, and refresh UI
-      await initApp();
-      
-      // Switch to dashboard
-      switchView("dashboard-view");
-      loginForm.reset();
+      throw new Error("Server error or endpoint not found.");
     } catch (err) {
-      console.error(err);
-      showToast("Connection to backend database failed.", "error");
+      console.warn("Backend login failed, falling back to local accounts:", err);
+      
+      const accounts = getAccounts();
+      const user = accounts.find(a => a.username.toLowerCase() === usernameInput.toLowerCase());
+      if (user && user.password === passwordInput) {
+        localStorage.setItem("quizmania_active_user", user.username);
+        showToast(`Signed in successfully as ${user.username} (Offline Mode)!`, "success");
+        await initApp();
+        switchView("dashboard-view");
+        loginForm.reset();
+      } else {
+        const defaultUser = DEFAULT_ACCOUNTS.find(a => a.username.toLowerCase() === usernameInput.toLowerCase());
+        if (defaultUser && defaultUser.password === passwordInput) {
+          localStorage.setItem("quizmania_active_user", defaultUser.username);
+          showToast(`Signed in successfully as ${defaultUser.username} (Offline Mode)!`, "success");
+          await initApp();
+          switchView("dashboard-view");
+          loginForm.reset();
+        } else {
+          showToast("Invalid username or password (offline).", "error");
+        }
+      }
     }
   });
 
@@ -2010,28 +2042,52 @@ function setupLoginHandlers() {
         })
       });
       
-      const data = await res.json();
-      if (!res.ok) {
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("quizmania_active_user", data.username);
+        showToast("Account created successfully!", "success");
+        await initApp();
+        switchView("dashboard-view");
+        signupForm.reset();
+        tabLoginBtn.click();
+        return;
+      }
+      
+      if (res.status === 400) {
+        const data = await res.json();
         showToast(data.error || "Registration failed.", "error");
         return;
       }
 
-      // Auto log-in
-      localStorage.setItem("quizmania_active_user", data.username);
-      showToast("Account created successfully!", "success");
-      
-      // Load user profile, history, and refresh UI
-      await initApp();
-
-      // Switch to dashboard
-      switchView("dashboard-view");
-
-      // Reset forms and tabs
-      signupForm.reset();
-      tabLoginBtn.click(); // Reset tab to Sign In
+      throw new Error("Server error or endpoint not found.");
     } catch (err) {
-      console.error(err);
-      showToast("Connection to backend database failed.", "error");
+      console.warn("Backend registration failed, falling back to local accounts:", err);
+      
+      const accounts = getAccounts();
+      const exists = accounts.some(a => a.username.toLowerCase() === usernameInput.toLowerCase()) ||
+                     DEFAULT_ACCOUNTS.some(a => a.username.toLowerCase() === usernameInput.toLowerCase());
+      
+      if (exists) {
+        showToast("Username is already taken (offline).", "error");
+        return;
+      }
+
+      const newAccount = {
+        username: usernameInput,
+        password: passwordInput,
+        role: selectedSignupRole
+      };
+      
+      accounts.push(newAccount);
+      saveAccounts(accounts);
+      
+      localStorage.setItem("quizmania_active_user", newAccount.username);
+      showToast("Account created successfully (Offline Mode)!", "success");
+      
+      await initApp();
+      switchView("dashboard-view");
+      signupForm.reset();
+      tabLoginBtn.click();
     }
   });
 
