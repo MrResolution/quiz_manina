@@ -493,19 +493,53 @@ document.addEventListener("DOMContentLoaded", () => {
   setupShareModal();
   setupCSVHandlers();
   setupHistoryHandlers();
+  setupLoginHandlers();
   
   // Render Lucide icons
   lucide.createIcons();
 });
 
-// --- STATE PERSISTENCE ---
+// --- STATE PERSISTENCE & ACCOUNT MANAGEMENT ---
+const DEFAULT_ACCOUNTS = [
+  { username: "student", password: "password", role: "student" },
+  { username: "teacher", password: "password", role: "teacher" }
+];
+
+function getAccounts() {
+  const raw = localStorage.getItem("quizmania_accounts");
+  if (!raw) {
+    localStorage.setItem("quizmania_accounts", JSON.stringify(DEFAULT_ACCOUNTS));
+    return DEFAULT_ACCOUNTS;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return DEFAULT_ACCOUNTS;
+  }
+}
+
+function saveAccounts(accounts) {
+  localStorage.setItem("quizmania_accounts", JSON.stringify(accounts));
+}
+
 function saveUserProfile() {
-  localStorage.setItem("quizmania_user_state", JSON.stringify(state.user));
+  const activeUser = localStorage.getItem("quizmania_active_user");
+  if (activeUser) {
+    localStorage.setItem(`quizmania_profile_${activeUser.toLowerCase()}`, JSON.stringify(state.user));
+  }
   updateHeaderProfile();
 }
 
 function loadUserProfile() {
-  const savedState = localStorage.getItem("quizmania_user_state");
+  const activeUser = localStorage.getItem("quizmania_active_user");
+  if (!activeUser) {
+    document.getElementById("login-overlay").classList.add("active");
+    return;
+  }
+
+  document.getElementById("login-overlay").classList.remove("active");
+  
+  const savedState = localStorage.getItem(`quizmania_profile_${activeUser.toLowerCase()}`);
   if (savedState) {
     try {
       state.user = JSON.parse(savedState);
@@ -513,15 +547,60 @@ function loadUserProfile() {
       console.error("Failed to parse saved state", e);
     }
   } else {
-    // Save fresh state
+    const accounts = getAccounts();
+    const account = accounts.find(a => a.username.toLowerCase() === activeUser.toLowerCase());
+    state.user = {
+      xp: 0,
+      quizzesCompleted: 0,
+      totalAnswers: 0,
+      correctAnswers: 0,
+      badges: [],
+      username: account ? account.username : activeUser,
+      role: account ? account.role : "student"
+    };
     saveUserProfile();
   }
   updateHeaderProfile();
+  applyRoleAccessControl();
+}
+
+function applyRoleAccessControl() {
+  const role = state.user.role || "student";
+  const navAnalytics = document.querySelector('[data-target="analytics-view"]');
+  const navCreator = document.querySelector('[data-target="creator-view"]');
+
+  if (role === "student") {
+    if (navAnalytics) navAnalytics.style.display = "none";
+    if (navCreator) navCreator.style.display = "none";
+    
+    // Redirect if they are somehow on a restricted view
+    if (state.currentView === "analytics-view" || state.currentView === "creator-view") {
+      switchView("dashboard-view");
+    }
+  } else {
+    if (navAnalytics) navAnalytics.style.display = "";
+    if (navCreator) navCreator.style.display = "";
+  }
 }
 
 function updateHeaderProfile() {
   document.getElementById("header-user-xp").textContent = state.user.xp.toLocaleString();
   document.getElementById("header-user-level").textContent = calculateLevel(state.user.xp);
+  
+  // Update role badge, username, and avatar
+  const roleBadge = document.getElementById("header-user-role-badge");
+  const usernameEl = document.getElementById("header-username");
+  const avatarEl = document.getElementById("header-user-avatar");
+  
+  if (roleBadge) {
+    roleBadge.textContent = state.user.role === "teacher" ? "Teacher" : "Student";
+  }
+  if (usernameEl) {
+    usernameEl.textContent = state.user.username || "You";
+  }
+  if (avatarEl) {
+    avatarEl.textContent = (state.user.username || "Y")[0].toUpperCase();
+  }
   
   // Update dashboard statistics
   const statsXp = document.getElementById("stats-xp");
@@ -2079,3 +2158,142 @@ renderDashboard = function() {
   
   lucide.createIcons();
 };
+
+function setupLoginHandlers() {
+  const loginOverlay = document.getElementById("login-overlay");
+  
+  // Tab Switchers
+  const tabLoginBtn = document.getElementById("tab-login-btn");
+  const tabSignupBtn = document.getElementById("tab-signup-btn");
+  const loginForm = document.getElementById("login-form");
+  const signupForm = document.getElementById("signup-form");
+
+  tabLoginBtn.addEventListener("click", () => {
+    tabLoginBtn.classList.add("active");
+    tabSignupBtn.classList.remove("active");
+    loginForm.classList.add("active");
+    signupForm.classList.remove("active");
+  });
+
+  tabSignupBtn.addEventListener("click", () => {
+    tabSignupBtn.classList.add("active");
+    tabLoginBtn.classList.remove("active");
+    signupForm.classList.add("active");
+    loginForm.classList.remove("active");
+  });
+
+  // Role buttons on Sign Up
+  const roleStudentBtn = document.getElementById("role-student-btn");
+  const roleTeacherBtn = document.getElementById("role-teacher-btn");
+  let selectedSignupRole = "student";
+
+  roleStudentBtn.addEventListener("click", () => {
+    roleStudentBtn.classList.add("selected");
+    roleTeacherBtn.classList.remove("selected");
+    selectedSignupRole = "student";
+  });
+
+  roleTeacherBtn.addEventListener("click", () => {
+    roleTeacherBtn.classList.add("selected");
+    roleStudentBtn.classList.remove("selected");
+    selectedSignupRole = "teacher";
+  });
+
+  // Sign In submit
+  loginForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const usernameInput = document.getElementById("l-username").value.trim();
+    const passwordInput = document.getElementById("l-password").value;
+
+    const accounts = getAccounts();
+    const found = accounts.find(a => a.username.toLowerCase() === usernameInput.toLowerCase());
+
+    if (!found || found.password !== passwordInput) {
+      showToast("Invalid username or password.", "error");
+      return;
+    }
+
+    localStorage.setItem("quizmania_active_user", found.username);
+    showToast(`Signed in successfully as ${found.username}!`, "success");
+    loadUserProfile();
+    
+    // Switch to dashboard
+    switchView("dashboard-view");
+    
+    // Reset forms
+    loginForm.reset();
+  });
+
+  // Sign Up submit
+  signupForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const usernameInput = document.getElementById("s-username").value.trim();
+    const passwordInput = document.getElementById("s-password").value;
+
+    if (usernameInput.length < 3) {
+      showToast("Username must be at least 3 characters.", "warning");
+      return;
+    }
+
+    const accounts = getAccounts();
+    const exists = accounts.some(a => a.username.toLowerCase() === usernameInput.toLowerCase());
+
+    if (exists) {
+      showToast("Username already exists.", "error");
+      return;
+    }
+
+    // Register account
+    accounts.push({
+      username: usernameInput,
+      password: passwordInput,
+      role: selectedSignupRole
+    });
+    saveAccounts(accounts);
+
+    // Auto log-in
+    localStorage.setItem("quizmania_active_user", usernameInput);
+    showToast("Account created successfully!", "success");
+    loadUserProfile();
+
+    // Switch to dashboard
+    switchView("dashboard-view");
+
+    // Reset forms and tabs
+    signupForm.reset();
+    tabLoginBtn.click(); // Reset tab to Sign In
+  });
+
+  // Logout button handler
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    if (confirm("Are you sure you want to log out?")) {
+      localStorage.removeItem("quizmania_active_user");
+      
+      // Clear game states
+      if (state.gameplay.timerInterval) {
+        clearInterval(state.gameplay.timerInterval);
+      }
+      
+      // Reset user state to generic guest
+      state.user = {
+        xp: 0,
+        quizzesCompleted: 0,
+        totalAnswers: 0,
+        correctAnswers: 0,
+        badges: [],
+        username: "You",
+        role: "student"
+      };
+
+      // Show login overlay
+      loginOverlay.classList.add("active");
+      showToast("Logged out successfully.", "info");
+      
+      // Reset input fields
+      document.getElementById("l-username").value = "";
+      document.getElementById("l-password").value = "";
+      
+      applyRoleAccessControl();
+    }
+  });
+}

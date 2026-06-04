@@ -49,12 +49,15 @@
           </li>
         </ul>
 
-        <div class="user-profile-badge">
-          <div class="user-avatar">U</div>
-          <div>
-            <div style="font-size: 11px; color: var(--text-muted);">Level <span id="header-user-level">1</span></div>
-            <div class="user-xp"><span id="header-user-xp">0</span> XP</div>
+        <div class="user-profile-badge" style="gap: 8px;">
+          <div class="user-avatar" id="header-user-avatar">U</div>
+          <div style="display: flex; flex-direction: column;">
+            <div style="font-size: 12px; font-weight: 700; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" id="header-username">You</div>
+            <div style="font-size: 10px; color: var(--text-muted);"><span id="header-user-role-badge">Student</span> • Lvl <span id="header-user-level">1</span></div>
           </div>
+          <button class="logout-btn" id="logout-btn" style="margin-left: 8px;" title="Logout">
+            <i data-lucide="log-out" size="14"></i>
+          </button>
         </div>
       </nav>
     </header>
@@ -555,6 +558,83 @@
         <button class="btn-icon" id="share-copy-btn" data-tooltip="Copy to clipboard"><i data-lucide="copy" size="18"></i></button>
       </div>
       <p style="font-size: 12px; color: var(--text-muted); margin-top: 12px;">Note: Quiz data is embedded in the URL so the recipient doesn't need an account.</p>
+    </div>
+  </div>
+
+  <!-- LOGIN & SIGNUP OVERLAY -->
+  <div class="login-overlay active" id="login-overlay">
+    <div class="login-card glass">
+      <div class="login-logo">Q</div>
+      <h2 class="login-title text-gradient">Welcome to QuizMania</h2>
+      <p class="login-subtitle">Learn, build, and test your knowledge</p>
+
+      <div class="login-tabs">
+        <button class="login-tab-btn active" id="tab-login-btn">Sign In</button>
+        <button class="login-tab-btn" id="tab-signup-btn">Create Account</button>
+      </div>
+
+      <!-- SIGN IN FORM -->
+      <form class="login-form active" id="login-form">
+        <div class="login-group">
+          <label class="login-label" for="l-username">Username</label>
+          <div class="login-input-wrapper">
+            <i data-lucide="user" class="login-input-icon" size="16"></i>
+            <input type="text" class="login-input" id="l-username" placeholder="Enter username" required autocomplete="username">
+          </div>
+        </div>
+
+        <div class="login-group">
+          <label class="login-label" for="l-password">Password</label>
+          <div class="login-input-wrapper">
+            <i data-lucide="lock" class="login-input-icon" size="16"></i>
+            <input type="password" class="login-input" id="l-password" placeholder="Enter password" required autocomplete="current-password">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" type="submit" style="margin-top: 8px;">
+          Sign In <i data-lucide="log-in"></i>
+        </button>
+
+        <p class="login-help-text">
+          Demo Student: <code>student</code> / <code>password</code><br>
+          Demo Teacher: <code>teacher</code> / <code>password</code>
+        </p>
+      </form>
+
+      <!-- SIGN UP FORM -->
+      <form class="login-form" id="signup-form">
+        <div class="login-group">
+          <label class="login-label" for="s-username">Username</label>
+          <div class="login-input-wrapper">
+            <i data-lucide="user" class="login-input-icon" size="16"></i>
+            <input type="text" class="login-input" id="s-username" placeholder="Choose a username" required autocomplete="username">
+          </div>
+        </div>
+
+        <div class="login-group">
+          <label class="login-label" for="s-password">Password</label>
+          <div class="login-input-wrapper">
+            <i data-lucide="lock" class="login-input-icon" size="16"></i>
+            <input type="password" class="login-input" id="s-password" placeholder="Choose a password" required autocomplete="new-password">
+          </div>
+        </div>
+
+        <div class="login-group">
+          <label class="login-label">I am a...</label>
+          <div class="role-selection-grid">
+            <button type="button" class="role-option-btn selected" id="role-student-btn">
+              <i data-lucide="graduation-cap"></i> Student
+            </button>
+            <button type="button" class="role-option-btn" id="role-teacher-btn">
+              <i data-lucide="briefcase"></i> Teacher
+            </button>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" type="submit" style="margin-top: 8px;">
+          Create Account <i data-lucide="user-plus"></i>
+        </button>
+      </form>
     </div>
   </div>
 
