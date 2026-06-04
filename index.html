@@ -323,21 +323,23 @@
             </div>
           </div>
 
-          <table class="rankings-table">
-            <thead>
-              <tr>
-                <th style="width: 80px;">Rank</th>
-                <th>Competitor</th>
-                <th>Level</th>
-                <th>Accuracy</th>
-                <th>Quizzes Played</th>
-                <th style="text-align: right;">Total Score (XP)</th>
-              </tr>
-            </thead>
-            <tbody id="leaderboard-table-body">
-              <!-- Dynamically Populated -->
-            </tbody>
-          </table>
+          <div class="table-wrapper">
+            <table class="rankings-table">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Rank</th>
+                  <th>Competitor</th>
+                  <th>Level</th>
+                  <th>Accuracy</th>
+                  <th>Quizzes Played</th>
+                  <th style="text-align: right;">Total Score (XP)</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboard-table-body">
+                <!-- Dynamically Populated -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -517,21 +519,23 @@
             </button>
           </div>
 
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>Quiz Title</th>
-                <th>Category</th>
-                <th>Score</th>
-                <th>Accuracy</th>
-                <th>Result</th>
-                <th>Date & Time</th>
-              </tr>
-            </thead>
-            <tbody id="history-table-body">
-              <!-- Dynamically Populated -->
-            </tbody>
-          </table>
+          <div class="table-wrapper">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Quiz Title</th>
+                  <th>Category</th>
+                  <th>Score</th>
+                  <th>Accuracy</th>
+                  <th>Result</th>
+                  <th>Date & Time</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body">
+                <!-- Dynamically Populated -->
+              </tbody>
+            </table>
+          </div>
 
           <div id="history-empty-state" style="display: none; text-align: center; padding: 60px 24px;">
             <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
@@ -691,8 +695,14 @@
     </div>
   </div>
 
-  <!-- LOGIN & SIGNUP OVERLAY -->
   <div class="login-overlay active" id="login-overlay">
+    <!-- Login Background Graphics -->
+    <div class="login-bg-graphics">
+      <div class="login-orb login-orb-1"></div>
+      <div class="login-orb login-orb-2"></div>
+      <div class="login-orb login-orb-3"></div>
+      <div class="login-grid-pattern"></div>
+    </div>
     <div class="login-card glass">
       <img src="logo.png" alt="QuizMania Logo" class="login-logo" style="background: none; padding: 0; box-shadow: none; object-fit: contain; width: 120px; height: 120px; margin-bottom: 20px;">
       <h2 class="login-title text-gradient">Welcome to quizMaina</h2>

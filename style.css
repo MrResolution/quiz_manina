@@ -1529,6 +1529,12 @@ header {
   background: var(--text-muted);
 }
 
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* --- RESPONSIVE ADAPTABILITY --- */
 @media (max-width: 950px) {
   .dashboard-grid {
@@ -1546,15 +1552,50 @@ header {
 
 @media (max-width: 768px) {
   .navbar {
-    flex-direction: column;
-    gap: 12px;
-    padding: 14px;
+    display: grid;
+    grid-template-areas: 
+      "logo user"
+      "nav nav";
+    grid-template-columns: 1fr auto;
+    row-gap: 14px;
+    column-gap: 8px;
+    padding: 12px 14px;
+  }
+  
+  .logo {
+    grid-area: logo;
+    justify-self: start;
+  }
+  
+  .navbar > div {
+    grid-area: user;
+    justify-self: end;
   }
   
   .nav-links {
+    grid-area: nav;
+    display: flex;
+    overflow-x: auto;
+    white-space: nowrap;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
     width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
+    padding-bottom: 4px;
+    gap: 4px;
+    scrollbar-width: none;
+  }
+  
+  .nav-links::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .nav-item {
+    flex: 0 0 auto;
+  }
+  
+  .nav-item a {
+    padding: 6px 12px;
+    font-size: 13px;
   }
   
   .controls-row {
@@ -1571,7 +1612,7 @@ header {
   }
   
   .hero-title {
-    font-size: 26px;
+    font-size: 24px;
   }
   
   .creator-row-2col {
@@ -1588,13 +1629,48 @@ header {
   }
   
   .arena-header {
-    flex-direction: column;
-    gap: 12px;
+    display: grid;
+    grid-template-areas: 
+      "meta timer"
+      "progress progress";
+    grid-template-columns: 1fr auto;
+    row-gap: 14px;
+    column-gap: 12px;
+    padding: 14px;
+  }
+  
+  .arena-meta-left {
+    grid-area: meta;
+  }
+  
+  .timer-radial-container {
+    grid-area: timer;
+    justify-self: end;
   }
   
   .arena-progress-container {
+    grid-area: progress;
     margin: 0;
     width: 100%;
+  }
+
+  .full-width-panel {
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .login-card {
+    padding: 24px 16px;
+    max-width: 380px;
+  }
+
+  .login-title {
+    font-size: 22px;
+  }
+
+  .role-selection-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
 
@@ -2181,14 +2257,13 @@ header {
 .login-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(12px);
+  background: var(--bg-color);
   display: none;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, background-color 0.3s ease;
 }
 
 .login-overlay.active {
@@ -2422,4 +2497,82 @@ header {
   background: var(--success-bg);
   border: 1px solid var(--success-border);
   padding: 16px;
+}
+
+/* --- LOGIN SCREEN DYNAMIC BACKGROUND --- */
+.login-bg-graphics {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.login-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.25;
+  animation: floatOrb 20s infinite alternate ease-in-out;
+  mix-blend-mode: multiply;
+}
+
+.dark-theme .login-orb {
+  opacity: 0.15;
+  mix-blend-mode: screen;
+}
+
+.login-orb-1 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, var(--primary-color) 0%, transparent 70%);
+  top: -50px;
+  left: -50px;
+}
+
+.login-orb-2 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--accent-blue) 0%, transparent 70%);
+  bottom: -100px;
+  right: -50px;
+  animation-duration: 25s;
+  animation-delay: -5s;
+}
+
+.login-orb-3 {
+  width: 250px;
+  height: 250px;
+  background: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation-duration: 30s;
+  animation-delay: -10s;
+}
+
+.login-grid-pattern {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--surface-border) 1.5px, transparent 1.5px);
+  background-size: 32px 32px;
+  opacity: 0.6;
+  z-index: 2;
+}
+
+.login-card {
+  z-index: 10;
+  backdrop-filter: blur(16px);
+}
+
+@keyframes floatOrb {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(60px, -60px) scale(1.15);
+  }
+  100% {
+    transform: translate(-30px, 30px) scale(0.9);
+  }
 }
