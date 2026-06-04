@@ -477,9 +477,14 @@ let state = {
 
 // --- INITIALIZATION ---
 document.addEventListener("DOMContentLoaded", () => {
-  loadUserProfile();
-  loadCustomQuizzes();
-  loadAttemptHistory();
+  initApp();
+});
+
+async function initApp() {
+  await loadUserProfile();
+  await loadQuizzes();
+  await loadAttemptHistory();
+  
   renderDashboard();
   renderMiniLeaderboard();
   renderMiniBadges();
@@ -497,7 +502,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Render Lucide icons
   lucide.createIcons();
-});
+}
 
 // --- STATE PERSISTENCE & ACCOUNT MANAGEMENT ---
 const DEFAULT_ACCOUNTS = [
@@ -523,14 +528,10 @@ function saveAccounts(accounts) {
 }
 
 function saveUserProfile() {
-  const activeUser = localStorage.getItem("quizmania_active_user");
-  if (activeUser) {
-    localStorage.setItem(`quizmania_profile_${activeUser.toLowerCase()}`, JSON.stringify(state.user));
-  }
   updateHeaderProfile();
 }
 
-function loadUserProfile() {
+async function loadUserProfile() {
   const activeUser = localStorage.getItem("quizmania_active_user");
   if (!activeUser) {
     document.getElementById("login-overlay").classList.add("active");
@@ -539,26 +540,33 @@ function loadUserProfile() {
 
   document.getElementById("login-overlay").classList.remove("active");
   
-  const savedState = localStorage.getItem(`quizmania_profile_${activeUser.toLowerCase()}`);
-  if (savedState) {
-    try {
-      state.user = JSON.parse(savedState);
-    } catch (e) {
-      console.error("Failed to parse saved state", e);
+  try {
+    const res = await fetch(`/api/users/${activeUser}`);
+    if (res.ok) {
+      state.user = await res.json();
+    } else {
+      state.user = {
+        xp: 0,
+        quizzesCompleted: 0,
+        totalAnswers: 0,
+        correctAnswers: 0,
+        badges: [],
+        username: activeUser,
+        role: "student"
+      };
     }
-  } else {
-    const accounts = getAccounts();
-    const account = accounts.find(a => a.username.toLowerCase() === activeUser.toLowerCase());
+  } catch (e) {
+    console.error("Failed to load user profile from database", e);
+    // Fallback in case of database disconnects
     state.user = {
       xp: 0,
       quizzesCompleted: 0,
       totalAnswers: 0,
       correctAnswers: 0,
       badges: [],
-      username: account ? account.username : activeUser,
-      role: account ? account.role : "student"
+      username: activeUser,
+      role: "student"
     };
-    saveUserProfile();
   }
   updateHeaderProfile();
   applyRoleAccessControl();
@@ -584,8 +592,14 @@ function applyRoleAccessControl() {
 }
 
 function updateHeaderProfile() {
-  document.getElementById("header-user-xp").textContent = state.user.xp.toLocaleString();
-  document.getElementById("header-user-level").textContent = calculateLevel(state.user.xp);
+  const xpEl = document.getElementById("header-user-xp");
+  if (xpEl) {
+    xpEl.textContent = state.user.xp.toLocaleString();
+  }
+  const lvlEl = document.getElementById("header-user-level");
+  if (lvlEl) {
+    lvlEl.textContent = calculateLevel(state.user.xp);
+  }
   
   // Update role badge, username, and avatar
   const roleBadge = document.getElementById("header-user-role-badge");
@@ -623,38 +637,40 @@ function calculateLevel(xp) {
   return Math.floor(Math.sqrt(xp / 100)) + 1;
 }
 
-function loadCustomQuizzes() {
-  const customQuizzesRaw = localStorage.getItem("quizmania_custom_quizzes");
-  if (customQuizzesRaw) {
-    try {
-      const customQuizzes = JSON.parse(customQuizzesRaw);
-      // Clean duplicate custom quizzes if any
-      state.quizzes = [...DEFAULT_QUIZZES, ...customQuizzes];
-    } catch (e) {
-      console.error("Failed to parse custom quizzes", e);
+async function loadQuizzes() {
+  try {
+    const res = await fetch('/api/quizzes');
+    if (res.ok) {
+      state.quizzes = await res.json();
     }
+  } catch (e) {
+    console.error("Failed to fetch quizzes from database", e);
   }
 }
 
-function saveCustomQuiz(newQuiz) {
-  const customQuizzesRaw = localStorage.getItem("quizmania_custom_quizzes");
-  let customQuizzes = [];
-  if (customQuizzesRaw) {
-    try {
-      customQuizzes = JSON.parse(customQuizzesRaw);
-    } catch (e) {
-      customQuizzes = [];
+async function saveCustomQuiz(newQuiz) {
+  try {
+    const response = await fetch('/api/quizzes/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...newQuiz,
+        createdBy: state.user.username
+      })
+    });
+    
+    if (response.ok) {
+      showToast("Quiz published to the database successfully!", "success");
+      await loadQuizzes();
+      renderDashboard();
+    } else {
+      const err = await response.json();
+      showToast(`Failed to create quiz: ${err.error || 'Server error'}`, "error");
     }
+  } catch (e) {
+    console.error("Error creating quiz:", e);
+    showToast("Error connecting to server.", "error");
   }
-  customQuizzes.push(newQuiz);
-  localStorage.setItem("quizmania_custom_quizzes", JSON.stringify(customQuizzes));
-  
-  // Reload quizzes
-  state.quizzes = [...DEFAULT_QUIZZES, ...customQuizzes];
-  
-  // Grant creator badge if not unlocked
-  unlockBadge("quiz_creator");
-  saveUserProfile();
 }
 
 function unlockBadge(badgeId) {
@@ -834,52 +850,39 @@ function setupDashboardControls() {
 }
 
 // --- RENDER MINI WIDGETS ---
-function renderMiniLeaderboard() {
+// --- RENDER MINI WIDGETS ---
+async function renderMiniLeaderboard() {
   const container = document.getElementById("mini-leaderboard-list");
   container.innerHTML = "";
 
-  // Combine bot leaderboard and user
-  let fullList = [...SIMULATED_LEADERBOARD];
-  
-  // Calculate where user ranks
-  const userRankData = {
-    rank: 6, // default
-    name: "You",
-    xp: state.user.xp,
-    accuracy: state.user.totalAnswers > 0 ? `${Math.round((state.user.correctAnswers / state.user.totalAnswers) * 100)}%` : "0%",
-    quizzes: state.user.quizzesCompleted,
-    avatar: "U"
-  };
+  try {
+    const res = await fetch('/api/leaderboard');
+    if (res.ok) {
+      const leaderboard = await res.json();
+      leaderboard.slice(0, 5).forEach(item => {
+        const isUser = item.name.toLowerCase() === state.user.username.toLowerCase();
+        const row = document.createElement("div");
+        row.className = "leaderboard-row";
+        if (isUser) {
+          row.style.background = "rgba(139, 92, 246, 0.1)";
+          row.style.borderColor = "rgba(139, 92, 246, 0.2)";
+        }
 
-  fullList.push(userRankData);
-  fullList.sort((a, b) => b.xp - a.xp);
-
-  // Recalculate ranks
-  fullList.forEach((item, index) => {
-    item.rank = index + 1;
-  });
-
-  // Display top 5
-  fullList.slice(0, 5).forEach(item => {
-    const isUser = item.name === "You";
-    const row = document.createElement("div");
-    row.className = "leaderboard-row";
-    if (isUser) {
-      row.style.background = "rgba(139, 92, 246, 0.1)";
-      row.style.borderColor = "rgba(139, 92, 246, 0.2)";
+        row.innerHTML = `
+          <span class="leaderboard-rank rank-${item.rank}">${item.rank}</span>
+          <div class="leaderboard-avatar">${item.avatar}</div>
+          <div class="leaderboard-info">
+            <div class="leaderboard-name">${isUser ? "You (Player)" : item.name}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">${item.quizzes} Quizzes • ${item.accuracy} Acc</div>
+          </div>
+          <span class="leaderboard-score">${item.xp.toLocaleString()} XP</span>
+        `;
+        container.appendChild(row);
+      });
     }
-
-    row.innerHTML = `
-      <span class="leaderboard-rank rank-${item.rank}">${item.rank}</span>
-      <div class="leaderboard-avatar">${item.avatar}</div>
-      <div class="leaderboard-info">
-        <div class="leaderboard-name">${isUser ? "You (Player)" : item.name}</div>
-        <div style="font-size: 11px; color: var(--text-muted);">${item.quizzes} Quizzes • ${item.accuracy} Acc</div>
-      </div>
-      <span class="leaderboard-score">${item.xp.toLocaleString()} XP</span>
-    `;
-    container.appendChild(row);
-  });
+  } catch (e) {
+    console.error("Failed to render mini leaderboard", e);
+  }
 }
 
 function renderMiniBadges() {
@@ -897,59 +900,49 @@ function renderMiniBadges() {
 }
 
 // --- RENDER FULL LEADERBOARD VIEW ---
-function renderLeaderboard() {
+async function renderLeaderboard() {
   const tableBody = document.getElementById("leaderboard-table-body");
   tableBody.innerHTML = "";
 
-  let fullList = [...SIMULATED_LEADERBOARD];
-  const userRankData = {
-    rank: 6,
-    name: "You",
-    xp: state.user.xp,
-    accuracy: state.user.totalAnswers > 0 ? `${Math.round((state.user.correctAnswers / state.user.totalAnswers) * 100)}%` : "0%",
-    quizzes: state.user.quizzesCompleted,
-    avatar: "U"
-  };
+  try {
+    const res = await fetch('/api/leaderboard');
+    if (res.ok) {
+      const leaderboard = await res.json();
+      
+      // Find current user's rank
+      const userRankItem = leaderboard.find(item => item.name.toLowerCase() === state.user.username.toLowerCase());
+      const userRank = userRankItem ? userRankItem.rank : "-";
+      document.getElementById("lb-user-rank").textContent = `#${userRank}`;
 
-  fullList.push(userRankData);
-  fullList.sort((a, b) => b.xp - a.xp);
+      leaderboard.forEach(item => {
+        const isUser = item.name.toLowerCase() === state.user.username.toLowerCase();
+        const tr = document.createElement("tr");
+        if (isUser) {
+          tr.style.background = "rgba(139, 92, 246, 0.1)";
+          tr.style.fontWeight = "bold";
+        }
 
-  let userRank = 6;
-  fullList.forEach((item, index) => {
-    item.rank = index + 1;
-    if (item.name === "You") {
-      userRank = item.rank;
+        const calculatedLvl = calculateLevel(item.xp);
+
+        tr.innerHTML = `
+          <td style="font-weight: 800; font-family: var(--font-heading);" class="rank-${item.rank}">#${item.rank}</td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="leaderboard-avatar" style="margin: 0;">${item.avatar}</div>
+              <span>${isUser ? "You (Player)" : item.name}</span>
+            </div>
+          </td>
+          <td>Level ${calculatedLvl}</td>
+          <td style="color: var(--success-color);">${item.accuracy}</td>
+          <td>${item.quizzes}</td>
+          <td style="text-align: right; font-weight: 700; color: var(--accent-blue);">${item.xp.toLocaleString()} XP</td>
+        `;
+        tableBody.appendChild(tr);
+      });
     }
-  });
-
-  // Update User Rank Display
-  document.getElementById("lb-user-rank").textContent = `#${userRank}`;
-
-  fullList.forEach(item => {
-    const isUser = item.name === "You";
-    const tr = document.createElement("tr");
-    if (isUser) {
-      tr.style.background = "rgba(139, 92, 246, 0.1)";
-      tr.style.fontWeight = "bold";
-    }
-
-    const calculatedLvl = calculateLevel(item.xp);
-
-    tr.innerHTML = `
-      <td style="font-weight: 800; font-family: var(--font-heading);" class="rank-${item.rank}">#${item.rank}</td>
-      <td>
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div class="leaderboard-avatar" style="margin: 0;">${item.avatar}</div>
-          <span>${isUser ? "You (Player)" : item.name}</span>
-        </div>
-      </td>
-      <td>Level ${calculatedLvl}</td>
-      <td style="color: var(--success-color);">${item.accuracy}</td>
-      <td>${item.quizzes}</td>
-      <td style="text-align: right; font-weight: 700; color: var(--accent-blue);">${item.xp.toLocaleString()} XP</td>
-    `;
-    tableBody.appendChild(tr);
-  });
+  } catch (e) {
+    console.error("Failed to render leaderboard", e);
+  }
 }
 
 // --- RENDER BADGES ROOM ---
@@ -1334,7 +1327,7 @@ function validateAnswer(selectedIdx) {
 }
 
 // --- FINISH QUIZ (RESULTS CALCULATIONS) ---
-function finishQuiz() {
+async function finishQuiz() {
   const gameplay = state.gameplay;
   const quiz = gameplay.activeQuiz;
   const questions = gameplay.shuffledQuestions;
@@ -1344,51 +1337,73 @@ function finishQuiz() {
   const formattedTime = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 
   const accuracyPct = Math.round((gameplay.correctCount / questions.length) * 100);
-
-  // Update global user stats
-  state.user.xp += gameplay.score;
-  state.user.quizzesCompleted += 1;
-  state.user.totalAnswers += questions.length;
-  state.user.correctAnswers += gameplay.correctCount;
-
-  // Badge updates based on performance
-  unlockBadge("first_quiz");
-  
-  if (accuracyPct === 100) {
-    unlockBadge("perfect_score");
-  }
-
-  if (accuracyPct >= 80) {
-    if (quiz.category === "Tech") {
-      unlockBadge("tech_master");
-    } else if (quiz.category === "Science") {
-      unlockBadge("space_explorer");
-    }
-  }
-
-  // Persist User updates
-  saveUserProfile();
-
-  // Record attempt history
   const passingScore = quiz.passingScore || 50;
   const passed = accuracyPct >= passingScore;
-  const attemptRecord = {
-    quizId: quiz.id,
-    quizTitle: quiz.title,
-    category: quiz.category,
-    score: gameplay.score,
-    correctCount: gameplay.correctCount,
-    totalQuestions: questions.length,
-    accuracyPct: accuracyPct,
-    passed: passed,
-    passingScore: passingScore,
-    maxStreak: gameplay.maxStreak,
-    timeTaken: formattedTime,
-    timestamp: new Date().toISOString(),
-    answersLog: gameplay.answersLog
-  };
-  state.attemptHistory.unshift(attemptRecord);
-  saveAttemptHistory();
+
+  try {
+    // 1. Update XP on database
+    await fetch(`/api/users/${state.user.username}/update-xp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ xp: gameplay.score })
+    });
+
+    // 2. Save attempt to database (which also checks and unlocks badges on the database)
+    await fetch('/api/attempts/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.user.username,
+        quizId: quiz.id,
+        score: gameplay.score,
+        correctCount: gameplay.correctCount,
+        totalQuestions: questions.length,
+        accuracyPct: accuracyPct,
+        passed: passed,
+        maxStreak: gameplay.maxStreak,
+        timeTaken: formattedTime,
+        answersLog: gameplay.answersLog
+      })
+    });
+
+    // 3. Reload profile & attempts history from database
+    await loadUserProfile();
+    await loadAttemptHistory();
+  } catch (e) {
+    console.error("Failed to sync attempt to backend database", e);
+    // Local fallback
+    state.user.xp += gameplay.score;
+    state.user.quizzesCompleted += 1;
+    state.user.totalAnswers += questions.length;
+    state.user.correctAnswers += gameplay.correctCount;
+    
+    // Badge updates based on performance
+    unlockBadge("first_quiz");
+    if (accuracyPct === 100) unlockBadge("perfect_score");
+    if (accuracyPct >= 80) {
+      if (quiz.category === "Tech") unlockBadge("tech_master");
+      else if (quiz.category === "Science") unlockBadge("space_explorer");
+    }
+
+    const attemptRecord = {
+      quizId: quiz.id,
+      quizTitle: quiz.title,
+      category: quiz.category,
+      score: gameplay.score,
+      correctCount: gameplay.correctCount,
+      totalQuestions: questions.length,
+      accuracyPct: accuracyPct,
+      passed: passed,
+      passingScore: passingScore,
+      maxStreak: gameplay.maxStreak,
+      timeTaken: formattedTime,
+      timestamp: new Date().toISOString(),
+      answersLog: gameplay.answersLog
+    };
+    state.attemptHistory.unshift(attemptRecord);
+    saveAttemptHistory();
+    saveUserProfile();
+  }
 
   // Toast notification
   if (passed) {
@@ -1831,12 +1846,69 @@ function setupHistoryHandlers() {
 }
 
 // --- ADMIN ANALYTICS DASHBOARD ---
-function renderAnalyticsDashboard() {
+async function renderAnalyticsDashboard() {
   const grid = document.getElementById("admin-stats-grid");
   const hardestList = document.getElementById("hardest-questions-list");
   grid.innerHTML = "";
   hardestList.innerHTML = "";
 
+  try {
+    const res = await fetch('/api/analytics');
+    if (res.ok) {
+      const data = await res.json();
+      
+      const totalAttempts = data.stats.total_attempts || 0;
+      const avgScore = data.stats.avg_accuracy || 0;
+      const completionRate = data.stats.pass_rate || 0;
+      
+      // Calculate total XP earned by all users
+      const xpRes = await fetch('/api/leaderboard');
+      let totalXpEarned = 0;
+      if (xpRes.ok) {
+        const users = await xpRes.json();
+        totalXpEarned = users.reduce((sum, u) => sum + u.xp, 0);
+      }
+
+      const stats = [
+        { icon: "📊", val: totalAttempts, lbl: "Global Attempts" },
+        { icon: "🎯", val: `${avgScore}%`, lbl: "Global Accuracy" },
+        { icon: "✅", val: `${completionRate}%`, lbl: "Global Pass Rate" },
+        { icon: "⚡", val: totalXpEarned.toLocaleString(), lbl: "Total XP Earned" }
+      ];
+
+      stats.forEach(s => {
+        const card = document.createElement("div");
+        card.className = "admin-stat-card glass";
+        card.innerHTML = `
+          <div class="admin-stat-icon">${s.icon}</div>
+          <div class="admin-stat-val">${s.val}</div>
+          <div class="admin-stat-lbl">${s.lbl}</div>
+        `;
+        grid.appendChild(card);
+      });
+
+      if (data.hardestQuestions.length === 0) {
+        hardestList.innerHTML = '<p style="color: var(--text-muted); padding: 20px;">No global statistics recorded yet.</p>';
+        return;
+      }
+
+      data.hardestQuestions.forEach(item => {
+        const rateClass = item.success_rate < 40 ? "bad" : item.success_rate < 70 ? "ok" : "good";
+        const row = document.createElement("div");
+        row.className = "hardest-question-row";
+        row.innerHTML = `
+          <span class="hardest-q-text">${item.question.length > 80 ? item.question.slice(0, 80) + '…' : item.question}</span>
+          <span class="hardest-q-rate ${rateClass}">${item.success_rate}% success (${item.total_answers} attempts)</span>
+        `;
+        hardestList.appendChild(row);
+      });
+      return;
+    }
+  } catch (err) {
+    console.error("Error fetching database analytics", err);
+  }
+
+  // Fallback to local user history calculations if database analytics API fails
   const history = state.attemptHistory;
   const totalAttempts = history.length;
   const avgScore = totalAttempts > 0 ? Math.round(history.reduce((s, a) => s + a.accuracyPct, 0) / totalAttempts) : 0;
@@ -1861,7 +1933,6 @@ function renderAnalyticsDashboard() {
     grid.appendChild(card);
   });
 
-  // Find hardest questions from history
   const questionStats = {};
   history.forEach(attempt => {
     if (!attempt.answersLog) return;
@@ -2200,32 +2271,41 @@ function setupLoginHandlers() {
   });
 
   // Sign In submit
-  loginForm.addEventListener("submit", (e) => {
+  loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const usernameInput = document.getElementById("l-username").value.trim();
     const passwordInput = document.getElementById("l-password").value;
 
-    const accounts = getAccounts();
-    const found = accounts.find(a => a.username.toLowerCase() === usernameInput.toLowerCase());
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: usernameInput, password: passwordInput })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Invalid username or password.", "error");
+        return;
+      }
 
-    if (!found || found.password !== passwordInput) {
-      showToast("Invalid username or password.", "error");
-      return;
+      localStorage.setItem("quizmania_active_user", data.username);
+      showToast(`Signed in successfully as ${data.username}!`, "success");
+      
+      // Load user profile, history, and refresh UI
+      await initApp();
+      
+      // Switch to dashboard
+      switchView("dashboard-view");
+      loginForm.reset();
+    } catch (err) {
+      console.error(err);
+      showToast("Connection to backend database failed.", "error");
     }
-
-    localStorage.setItem("quizmania_active_user", found.username);
-    showToast(`Signed in successfully as ${found.username}!`, "success");
-    loadUserProfile();
-    
-    // Switch to dashboard
-    switchView("dashboard-view");
-    
-    // Reset forms
-    loginForm.reset();
   });
 
   // Sign Up submit
-  signupForm.addEventListener("submit", (e) => {
+  signupForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const usernameInput = document.getElementById("s-username").value.trim();
     const passwordInput = document.getElementById("s-password").value;
@@ -2235,33 +2315,40 @@ function setupLoginHandlers() {
       return;
     }
 
-    const accounts = getAccounts();
-    const exists = accounts.some(a => a.username.toLowerCase() === usernameInput.toLowerCase());
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: usernameInput,
+          password: passwordInput,
+          role: selectedSignupRole
+        })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Registration failed.", "error");
+        return;
+      }
 
-    if (exists) {
-      showToast("Username already exists.", "error");
-      return;
+      // Auto log-in
+      localStorage.setItem("quizmania_active_user", data.username);
+      showToast("Account created successfully!", "success");
+      
+      // Load user profile, history, and refresh UI
+      await initApp();
+
+      // Switch to dashboard
+      switchView("dashboard-view");
+
+      // Reset forms and tabs
+      signupForm.reset();
+      tabLoginBtn.click(); // Reset tab to Sign In
+    } catch (err) {
+      console.error(err);
+      showToast("Connection to backend database failed.", "error");
     }
-
-    // Register account
-    accounts.push({
-      username: usernameInput,
-      password: passwordInput,
-      role: selectedSignupRole
-    });
-    saveAccounts(accounts);
-
-    // Auto log-in
-    localStorage.setItem("quizmania_active_user", usernameInput);
-    showToast("Account created successfully!", "success");
-    loadUserProfile();
-
-    // Switch to dashboard
-    switchView("dashboard-view");
-
-    // Reset forms and tabs
-    signupForm.reset();
-    tabLoginBtn.click(); // Reset tab to Sign In
   });
 
   // Logout button handler
