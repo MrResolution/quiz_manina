@@ -3,6 +3,8 @@ const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
+const fs = require('fs');
+
 const app = express();
 const PORT = 8080;
 
@@ -18,12 +20,24 @@ const pool = new Pool({
 app.use(express.json());
 app.use(express.static(path.join(__dirname))); // Serve frontend directly from root
 
-// Test Connection
-pool.query('SELECT NOW()', (err, res) => {
+// Test Connection and Run Schema Migrations
+pool.query('SELECT NOW()', async (err, res) => {
   if (err) {
     console.error('Database connection warning (Make sure your network allows outbound port 5432):', err.message);
   } else {
     console.log('Database connected successfully to Neon. Current Time:', res.rows[0].now);
+    
+    // Automatically initialize schema tables and seed default users
+    try {
+      const sqlPath = path.join(__dirname, 'init.sql');
+      if (fs.existsSync(sqlPath)) {
+        const sql = fs.readFileSync(sqlPath, 'utf8');
+        await pool.query(sql);
+        console.log('Database schemas verified and seeded successfully on Neon cloud database!');
+      }
+    } catch (migrationErr) {
+      console.error('Failed to run database migrations:', migrationErr);
+    }
   }
 });
 
