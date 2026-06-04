@@ -173,8 +173,24 @@ app.post('/api/users/:username/update-xp', async (req, res) => {
 
 // Get All Quizzes
 app.get('/api/quizzes', async (req, res) => {
+  const { username, role } = req.query;
   try {
-    const quizzesResult = await pool.query('SELECT * FROM quizzes ORDER BY created_at DESC');
+    let quizzesResult;
+    if (role === 'teacher') {
+      // Teachers see all public quizzes + their own private quizzes
+      quizzesResult = await pool.query(
+        'SELECT * FROM quizzes WHERE is_public = TRUE OR created_by = $1 ORDER BY created_at DESC',
+        [username]
+      );
+    } else if (username) {
+      // Students see all public quizzes + any they created
+      quizzesResult = await pool.query(
+        'SELECT * FROM quizzes WHERE is_public = TRUE OR created_by = $1 ORDER BY created_at DESC',
+        [username]
+      );
+    } else {
+      quizzesResult = await pool.query('SELECT * FROM quizzes WHERE is_public = TRUE ORDER BY created_at DESC');
+    }
     const quizzes = quizzesResult.rows;
     
     const fullQuizzes = [];
@@ -192,6 +208,7 @@ app.get('/api/quizzes', async (req, res) => {
         shuffleQuestions: q.shuffle_questions,
         shuffleAnswers: q.shuffle_answers,
         createdBy: q.created_by,
+        isPublic: q.is_public !== false,
         questions: questionsResult.rows.map(question => ({
           question: question.question,
           type: question.type,
@@ -233,6 +250,7 @@ app.get('/api/quizzes/:id', async (req, res) => {
       shuffleQuestions: quiz.shuffle_questions,
       shuffleAnswers: quiz.shuffle_answers,
       createdBy: quiz.created_by,
+      isPublic: quiz.is_public !== false,
       questions: questionsResult.rows.map(q => ({
         question: q.question,
         type: q.type,
@@ -250,7 +268,7 @@ app.get('/api/quizzes/:id', async (req, res) => {
 
 // Create Custom Quiz
 app.post('/api/quizzes/create', async (req, res) => {
-  const { id, title, description, category, difficulty, timeLimit, passingScore, maxAttempts, shuffleQuestions, shuffleAnswers, createdBy, questions } = req.body;
+  const { id, title, description, category, difficulty, timeLimit, passingScore, maxAttempts, shuffleQuestions, shuffleAnswers, createdBy, questions, isPublic } = req.body;
   
   if (!id || !title || !questions || !Array.isArray(questions)) {
     return res.status(400).json({ error: 'Invalid quiz payload.' });
@@ -262,9 +280,9 @@ app.post('/api/quizzes/create', async (req, res) => {
     
     // Insert Quiz
     await client.query(
-      `INSERT INTO quizzes (id, title, description, category, difficulty, time_limit, passing_score, max_attempts, shuffle_questions, shuffle_answers, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [id, title, description, category, difficulty, timeLimit || 30, passingScore || 50, maxAttempts || 0, shuffleQuestions !== false, shuffleAnswers !== false, createdBy || null]
+      `INSERT INTO quizzes (id, title, description, category, difficulty, time_limit, passing_score, max_attempts, shuffle_questions, shuffle_answers, created_by, is_public)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [id, title, description, category, difficulty, timeLimit || 30, passingScore || 50, maxAttempts || 0, shuffleQuestions !== false, shuffleAnswers !== false, createdBy || null, isPublic !== false]
     );
     
     // Insert Questions

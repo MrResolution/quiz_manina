@@ -280,7 +280,9 @@ function calculateLevel(xp) {
 
 async function loadQuizzes() {
   try {
-    const res = await fetch('/api/quizzes');
+    const usernameParam = state.user && state.user.username ? encodeURIComponent(state.user.username) : '';
+    const roleParam = state.user && state.user.role ? encodeURIComponent(state.user.role) : '';
+    const res = await fetch(`/api/quizzes?username=${usernameParam}&role=${roleParam}`);
     if (res.ok) {
       state.quizzes = await res.json();
     }
@@ -504,13 +506,23 @@ function renderDashboard() {
          </button>`
       : "";
 
+    const visibilityBadgeHtml = isTeacher
+      ? `<span class="visibility-badge ${quiz.isPublic !== false ? 'public' : 'private'}">
+           <i data-lucide="${quiz.isPublic !== false ? 'globe' : 'lock'}" style="width: 12px; height: 12px; margin-right: 4px;"></i>
+           ${quiz.isPublic !== false ? 'Public' : 'Private'}
+         </span>`
+      : "";
+
     card.innerHTML = `
       <div class="quiz-meta-top">
         <span class="quiz-category">${quiz.category}</span>
-        <span class="difficulty-badge difficulty-${quiz.difficulty}">
-          <span class="difficulty-dot"></span>
-          ${quiz.difficulty.charAt(0).toUpperCase() + quiz.difficulty.slice(1)}
-        </span>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          ${visibilityBadgeHtml}
+          <span class="difficulty-badge difficulty-${quiz.difficulty}">
+            <span class="difficulty-dot"></span>
+            ${quiz.difficulty.charAt(0).toUpperCase() + quiz.difficulty.slice(1)}
+          </span>
+        </div>
       </div>
       <h3 class="quiz-title">${quiz.title}</h3>
       <p class="quiz-description">${quiz.description}</p>
@@ -1433,6 +1445,7 @@ function setupQuizCreatorHandlers() {
     const maxAttempts = parseInt(document.getElementById("c-max-attempts").value) || 0;
     const shuffleQuestions = document.getElementById("c-shuffle-questions").checked;
     const shuffleAnswers = document.getElementById("c-shuffle-answers").checked;
+    const isPublic = document.getElementById("c-is-public") ? document.getElementById("c-is-public").checked : true;
 
     const newQuiz = {
       id: uniqueId,
@@ -1445,6 +1458,7 @@ function setupQuizCreatorHandlers() {
       maxAttempts: maxAttempts,
       shuffleQuestions: shuffleQuestions,
       shuffleAnswers: shuffleAnswers,
+      isPublic: isPublic,
       questions: parsedQuestions
     };
 
