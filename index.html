@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuizMania — Ultimate Interactive Trivia & Quiz Platform</title>
+  <meta name="description" content="Build your mind, test your skills, and earn badges on QuizMania. A premium, modern quiz creation and gameplay platform.">
+  <link rel="stylesheet" href="style.css">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <!-- Floating Background Orbs -->
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="app-container">
+    
+    <!-- HEADER & NAVIGATION -->
+    <header>
+      <nav class="navbar glass">
+        <a href="#" class="logo" id="nav-logo">
+          <div class="logo-icon">Q</div>
+          <span class="logo-text text-gradient">QuizMania</span>
+        </a>
+        
+        <ul class="nav-links">
+          <li class="nav-item active" data-target="dashboard-view">
+            <a href="#"><i data-lucide="layout-dashboard" size="18"></i>Dashboard</a>
+          </li>
+          <li class="nav-item" data-target="leaderboard-view">
+            <a href="#"><i data-lucide="trophy" size="18"></i>Leaderboard</a>
+          </li>
+          <li class="nav-item" data-target="badges-view">
+            <a href="#"><i data-lucide="award" size="18"></i>Badges</a>
+          </li>
+          <li class="nav-item" data-target="creator-view">
+            <a href="#"><i data-lucide="plus-circle" size="18"></i>Create Quiz</a>
+          </li>
+        </ul>
+
+        <div class="user-profile-badge">
+          <div class="user-avatar">U</div>
+          <div>
+            <div style="font-size: 11px; color: var(--text-muted);">Level <span id="header-user-level">1</span></div>
+            <div class="user-xp"><span id="header-user-xp">0</span> XP</div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+
+      <!-- 1. DASHBOARD VIEW -->
+      <section id="dashboard-view" class="view active">
+        <div class="dashboard-grid">
+          
+          <!-- Main Left Column -->
+          <div class="dashboard-main">
+            <!-- Hero Card -->
+            <div class="hero-card glass">
+              <div class="hero-content">
+                <h1 class="hero-title">Expand Your <span class="text-gradient">Knowledge Horizon</span></h1>
+                <p class="hero-subtitle">Test your intellect in web development, space science, history, and geography, or build your own custom trivia challenges!</p>
+                
+                <div class="hero-stats">
+                  <div class="hero-stat-item">
+                    <span class="hero-stat-val" id="stats-xp">0</span>
+                    <span class="hero-stat-lbl">Total XP</span>
+                  </div>
+                  <div style="width: 1px; background: rgba(255,255,255,0.1); height: 40px; align-self: center;"></div>
+                  <div class="hero-stat-item">
+                    <span class="hero-stat-val" id="stats-quizzes">0</span>
+                    <span class="hero-stat-lbl">Completed</span>
+                  </div>
+                  <div style="width: 1px; background: rgba(255,255,255,0.1); height: 40px; align-self: center;"></div>
+                  <div class="hero-stat-item">
+                    <span class="hero-stat-val" id="stats-accuracy">0%</span>
+                    <span class="hero-stat-lbl">Accuracy</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Floating Brain SVG Illustration -->
+              <svg class="hero-illustration" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="brainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#8b5cf6" />
+                    <stop offset="100%" stop-color="#ec4899" />
+                  </linearGradient>
+                </defs>
+                <circle cx="100" cy="100" r="80" fill="url(#brainGrad)" opacity="0.15" />
+                <path d="M100 45C72.4 45 50 67.4 50 95C50 106.6 54 117.2 60.6 125.6C59 133 60 141.4 64.4 148.4C68.8 155.4 75.8 159.8 83.4 160.6C88.2 161.2 92.4 160.2 96.2 158.4C97.4 158.8 98.6 159 100 159C101.4 159 102.6 158.8 103.8 158.4C107.6 160.2 111.8 161.2 116.6 160.6C124.2 159.8 131.2 155.4 135.6 148.4C140 141.4 141 133 139.4 125.6C146 117.2 150 106.6 150 95C150 67.4 127.6 45 100 45ZM100 55C108.2 55 116 57.6 122.4 62.4C118.8 68.2 112.4 72.2 105 72.8V79H100V72.8C92.6 72.2 86.2 68.2 82.6 62.4C89 57.6 96.8 55 100 55Z" fill="url(#brainGrad)" />
+              </svg>
+            </div>
+
+            <!-- Controls (Search & Category Filters) -->
+            <div class="controls-row">
+              <div class="search-wrapper">
+                <i data-lucide="search" class="search-icon" size="20"></i>
+                <input type="text" id="quiz-search" class="search-input" placeholder="Search quizzes by title or category...">
+              </div>
+              
+              <div class="category-filters" id="category-filters-container">
+                <button class="filter-chip active" data-category="all">All Quizzes</button>
+                <button class="filter-chip" data-category="Tech">Tech</button>
+                <button class="filter-chip" data-category="Science">Science</button>
+                <button class="filter-chip" data-category="Geography">Geography</button>
+                <button class="filter-chip" data-category="History">History</button>
+                <button class="filter-chip" data-category="Pop Culture">Pop Culture</button>
+              </div>
+            </div>
+
+            <!-- Quiz Cards Grid -->
+            <div class="quizzes-grid" id="quizzes-list-container">
+              <!-- Dynamically Populated -->
+            </div>
+          </div>
+
+          <!-- Sidebar Right Column -->
+          <div class="dashboard-sidebar">
+            <!-- Leaderboard Mini Widget -->
+            <div class="sidebar-panel glass">
+              <h3 class="sidebar-title"><i data-lucide="trophy" size="20" style="color: #f59e0b;"></i>Top Competitors</h3>
+              <div class="leaderboard-list" id="mini-leaderboard-list">
+                <!-- Dynamically Populated -->
+              </div>
+              <button class="btn btn-secondary" style="margin-top: 16px; font-size: 13px;" id="sidebar-view-leaderboard-btn">
+                View Full Rankings
+              </button>
+            </div>
+
+            <!-- Badges Unlocked Mini Widget -->
+            <div class="sidebar-panel glass badges-widget">
+              <h3 class="sidebar-title"><i data-lucide="award" size="20" style="color: #a855f7;"></i>My Badge Vault</h3>
+              <div class="badges-grid-mini" id="mini-badges-grid">
+                <!-- Dynamically Populated -->
+              </div>
+              <button class="btn btn-secondary" style="margin-top: 16px; font-size: 13px;" id="sidebar-view-badges-btn">
+                Open Showcase Room
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 2. QUIZ ARENA VIEW (GAMEPLAY) -->
+      <section id="arena-view" class="view">
+        <div class="arena-container">
+          
+          <!-- Arena Score, Timer, & Progress Header -->
+          <div class="arena-header glass">
+            <div class="arena-meta-left">
+              <h3 id="arena-quiz-title" class="text-gradient">Space Exploration Trivia</h3>
+              <div class="streak-counter" id="arena-streak">
+                <i data-lucide="flame" size="16"></i> <span id="arena-streak-val">0</span> Streak
+              </div>
+            </div>
+
+            <div class="arena-progress-container">
+              <div class="progress-label-row">
+                <span>Question <span id="arena-current-q-num">1</span> of <span id="arena-total-q-num">10</span></span>
+                <span>Score: <span id="arena-score-val">0 XP</span></span>
+              </div>
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="arena-progress-bar"></div>
+              </div>
+            </div>
+
+            <!-- Sleek Radial Timer -->
+            <div class="timer-radial-container">
+              <svg class="timer-svg" viewBox="0 0 60 60">
+                <circle class="timer-circle-bg" cx="30" cy="30" r="28" />
+                <circle class="timer-circle-val" id="arena-timer-fill" cx="30" cy="30" r="28" />
+              </svg>
+              <div class="timer-text" id="arena-timer-text">30</div>
+            </div>
+          </div>
+
+          <!-- Gameplay Card -->
+          <div class="question-card glass">
+            <div class="question-tag" id="arena-question-tag">Geography</div>
+            <div class="question-text" id="arena-question-text">Which celestial body is closest to Earth?</div>
+            
+            <div class="options-list" id="arena-options-list">
+              <!-- Options buttons dynamically populated -->
+            </div>
+
+            <!-- Answer Explanation Box (Hidden by default, shown on select) -->
+            <div class="explanation-panel glass" id="arena-explanation-panel" style="display: none;">
+              <div class="explanation-title">
+                <i data-lucide="help-circle" size="16" style="color: var(--accent-blue);"></i> Explanation
+              </div>
+              <div class="explanation-text" id="arena-explanation-text">
+                Explanation text goes here.
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="arena-actions">
+            <button class="btn btn-secondary" id="arena-quit-btn"><i data-lucide="x"></i> Quit Quiz</button>
+            <button class="btn btn-primary" id="arena-action-btn" disabled>Submit Answer <i data-lucide="check"></i></button>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 3. RESULTS & ANALYTICS VIEW -->
+      <section id="results-view" class="view">
+        <div class="results-container">
+          
+          <div class="results-hero glass">
+            <div class="trophy-glow-icon" id="results-icon">🏆</div>
+            <h1 class="text-gradient" id="results-heading">Awesome Job!</h1>
+            <p style="margin-bottom: 24px;" id="results-subheading">You have completed the Space Quiz</p>
+            
+            <div class="results-score-percent text-gradient-blue" id="results-score-pct">85%</div>
+            <div style="font-weight: 600; font-size: 15px; color: var(--text-secondary);">FINAL SCORE ACCURACY</div>
+
+            <div class="results-stats-row">
+              <div class="result-stat-box">
+                <div class="result-stat-val" id="res-stat-xp">+0 XP</div>
+                <div class="result-stat-lbl">XP Earned</div>
+              </div>
+              <div class="result-stat-box">
+                <div class="result-stat-val" id="res-stat-correct">0/0</div>
+                <div class="result-stat-lbl">Correct Answers</div>
+              </div>
+              <div class="result-stat-box">
+                <div class="result-stat-val" id="res-stat-time">0:00</div>
+                <div class="result-stat-lbl">Total Time</div>
+              </div>
+              <div class="result-stat-box">
+                <div class="result-stat-val" id="res-stat-streak">0</div>
+                <div class="result-stat-lbl">Max Streak</div>
+              </div>
+            </div>
+
+            <!-- Badges Earned In This Run -->
+            <div class="badges-unlocked-section" id="results-badges-container" style="display: none;">
+              <div class="badges-unlocked-title">🎖️ New Badges Unlocked!</div>
+              <div class="badges-unlocked-list" id="results-badges-list">
+                <!-- Dynamically populated chips -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="result-footer-actions">
+            <button class="btn btn-secondary" style="width: auto;" id="res-action-dashboard"><i data-lucide="home"></i> Home Dashboard</button>
+            <button class="btn btn-primary" style="width: auto;" id="res-action-retry"><i data-lucide="rotate-ccw"></i> Play Again</button>
+          </div>
+
+          <!-- Answer Breakdown / Review -->
+          <div class="results-review-section">
+            <h2 class="results-review-title">Detailed Performance Review</h2>
+            <div id="results-review-list">
+              <!-- Dynamically populated list of reviewed questions -->
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 4. LEADERBOARD VIEW -->
+      <section id="leaderboard-view" class="view">
+        <div class="full-width-panel glass">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <h1 class="text-gradient">Global Leaderboard</h1>
+              <p>Climb the ranks by answering accurately and finishing quickly!</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <div class="user-profile-badge" style="padding: 10px 20px;">
+                <i data-lucide="star" style="color: var(--warning-color);" size="18"></i>
+                <span>Your Rank: <strong id="lb-user-rank">#4</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <table class="rankings-table">
+            <thead>
+              <tr>
+                <th style="width: 80px;">Rank</th>
+                <th>Competitor</th>
+                <th>Level</th>
+                <th>Accuracy</th>
+                <th>Quizzes Played</th>
+                <th style="text-align: right;">Total Score (XP)</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-table-body">
+              <!-- Dynamically Populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 5. BADGES VIEW (SHOWCASE) -->
+      <section id="badges-view" class="view">
+        <div class="full-width-panel glass">
+          <h1 class="text-gradient">Trophy Room & Badges</h1>
+          <p>Collect special achievements as you excel across different quiz categories and display your trivia mastery!</p>
+
+          <div class="badge-gallery-grid" id="badges-gallery-container">
+            <!-- Dynamically Populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. QUIZ CREATOR VIEW -->
+      <section id="creator-view" class="view">
+        <div class="creator-container">
+          <div class="creator-header">
+            <h1 class="text-gradient">Quiz Builder Studio</h1>
+            <p>Design a custom challenge! Set your questions, choices, answers, and time limit to challenge others or test yourself.</p>
+          </div>
+
+          <form id="quiz-creator-form">
+            <!-- Meta Details Card -->
+            <div class="glass" style="padding: 32px; border-radius: var(--radius-lg); margin-bottom: 32px;">
+              <h3 style="margin-bottom: 20px; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="settings" style="color: var(--primary-color);"></i> Quiz Details
+              </h3>
+
+              <div class="creator-form-group">
+                <label class="creator-label" for="c-title">Quiz Title</label>
+                <input class="creator-input" type="text" id="c-title" placeholder="e.g. Advanced Cybersecurity Trivia" required>
+              </div>
+
+              <div class="creator-form-group">
+                <label class="creator-label" for="c-description">Description</label>
+                <textarea class="creator-textarea" id="c-description" rows="3" placeholder="Briefly summarize what this quiz covers..." required></textarea>
+              </div>
+
+              <div class="creator-row-2col">
+                <div class="creator-form-group">
+                  <label class="creator-label" for="c-category">Category</label>
+                  <select class="creator-select" id="c-category">
+                    <option value="Tech">Tech</option>
+                    <option value="Science">Science</option>
+                    <option value="Geography">Geography</option>
+                    <option value="History">History</option>
+                    <option value="Pop Culture">Pop Culture</option>
+                  </select>
+                </div>
+
+                <div class="creator-row-2col">
+                  <div class="creator-form-group">
+                    <label class="creator-label" for="c-difficulty">Difficulty</label>
+                    <select class="creator-select" id="c-difficulty">
+                      <option value="easy">Easy</option>
+                      <option value="medium" selected>Medium</option>
+                      <option value="hard">Hard</option>
+                    </select>
+                  </div>
+
+                  <div class="creator-form-group">
+                    <label class="creator-label" for="c-time-limit">Time Per Question (sec)</label>
+                    <input class="creator-input" type="number" id="c-time-limit" value="30" min="10" max="120" required>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Question List Builder -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 40px;">
+              <h2 style="font-size: 22px;">Questions (<span id="c-question-count-lbl">1</span>)</h2>
+              <button class="btn btn-secondary" type="button" style="width: auto;" id="c-add-question-btn">
+                <i data-lucide="plus"></i> Add Another Question
+              </button>
+            </div>
+
+            <div class="questions-builder-list" id="creator-questions-list">
+              <!-- Question builder items dynamically added -->
+            </div>
+
+            <!-- Submit Panel -->
+            <div style="margin-top: 40px; margin-bottom: 80px; display: flex; justify-content: flex-end; gap: 16px;">
+              <button class="btn btn-secondary" type="button" style="width: auto;" id="c-cancel-btn">Reset</button>
+              <button class="btn btn-primary" type="submit" style="width: auto;" id="c-save-quiz-btn"><i data-lucide="save"></i> Save & Publish Quiz</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
