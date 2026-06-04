@@ -463,11 +463,15 @@ let state = {
     maxStreak: 0,
     timeLeft: 0,
     timerInterval: null,
-    answersLog: [], // stores logs for review screen {question, selected, correct, isCorrect, explanation, options}
+    answersLog: [],
     startTime: null,
     questionStartTime: null,
-    unlockedBadgesThisRun: []
+    unlockedBadgesThisRun: [],
+    shuffledQuestions: [],   // randomized question order
+    selectedAnswers: {},     // {questionIndex: selectedValue} for review-before-submit
+    tabSwitchCount: 0        // anti-cheat tab switch counter
   },
+  attemptHistory: [],        // persisted array of past attempts
   currentView: "dashboard-view"
 };
 
@@ -475,6 +479,7 @@ let state = {
 document.addEventListener("DOMContentLoaded", () => {
   loadUserProfile();
   loadCustomQuizzes();
+  loadAttemptHistory();
   renderDashboard();
   renderMiniLeaderboard();
   renderMiniBadges();
@@ -483,6 +488,11 @@ document.addEventListener("DOMContentLoaded", () => {
   setupQuizArenaHandlers();
   setupQuizCreatorHandlers();
   setupResultsHandlers();
+  setupAntiCheat();
+  setupReviewModal();
+  setupShareModal();
+  setupCSVHandlers();
+  setupHistoryHandlers();
   
   // Render Lucide icons
   lucide.createIcons();
@@ -640,6 +650,10 @@ function switchView(viewId) {
     renderLeaderboard();
   } else if (viewId === "badges-view") {
     renderBadgesGallery();
+  } else if (viewId === "analytics-view") {
+    renderAnalyticsDashboard();
+  } else if (viewId === "history-view") {
+    renderAttemptHistory();
   }
   
   lucide.createIcons();
@@ -884,8 +898,37 @@ function startQuiz(quizId) {
   const quiz = state.quizzes.find(q => q.id === quizId);
   if (!quiz) return;
 
+  // Enforce attempt limits
+  if (quiz.maxAttempts && quiz.maxAttempts > 0) {
+    const pastAttempts = state.attemptHistory.filter(a => a.quizId === quizId);
+    if (pastAttempts.length >= quiz.maxAttempts) {
+      showToast(`You've reached the maximum of ${quiz.maxAttempts} attempt(s) for this quiz.`, "warning");
+      return;
+    }
+  }
+
+  // Deep clone questions so we can shuffle without mutating originals
+  let questions = JSON.parse(JSON.stringify(quiz.questions));
+
+  // Shuffle questions if configured
+  if (quiz.shuffleQuestions !== false) {
+    questions = shuffleArray(questions);
+  }
+
+  // Shuffle answer options if configured
+  if (quiz.shuffleAnswers !== false) {
+    questions.forEach(q => {
+      if (q.options && q.options.length > 0) {
+        const correctText = q.options[q.answer];
+        q.options = shuffleArray(q.options);
+        q.answer = q.options.indexOf(correctText);
+      }
+    });
+  }
+
   // Initialize gameplay state
   state.gameplay.activeQuiz = quiz;
+  state.gameplay.shuffledQuestions = questions;
   state.gameplay.currentQuestionIndex = 0;
   state.gameplay.score = 0;
   state.gameplay.correctCount = 0;
@@ -894,10 +937,12 @@ function startQuiz(quizId) {
   state.gameplay.answersLog = [];
   state.gameplay.startTime = Date.now();
   state.gameplay.unlockedBadgesThisRun = [];
+  state.gameplay.selectedAnswers = {};
+  state.gameplay.tabSwitchCount = 0;
 
   // Update header text
   document.getElementById("arena-quiz-title").textContent = quiz.title;
-  document.getElementById("arena-total-q-num").textContent = quiz.questions.length;
+  document.getElementById("arena-total-q-num").textContent = questions.length;
   
   // Transition View
   switchView("arena-view");
@@ -906,39 +951,84 @@ function startQuiz(quizId) {
   loadQuestion();
 }
 
+function shuffleArray(arr) {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 function loadQuestion() {
   const quiz = state.gameplay.activeQuiz;
   const qIdx = state.gameplay.currentQuestionIndex;
-  const questionObj = quiz.questions[qIdx];
+  const questions = state.gameplay.shuffledQuestions;
+  const questionObj = questions[qIdx];
 
   // Update indicators
   document.getElementById("arena-current-q-num").textContent = qIdx + 1;
   document.getElementById("arena-score-val").textContent = `${state.gameplay.score} XP`;
   
   // Progress Bar
-  const progressPercent = (qIdx / quiz.questions.length) * 100;
+  const progressPercent = (qIdx / questions.length) * 100;
   document.getElementById("arena-progress-bar").style.width = `${progressPercent}%`;
 
   // Question details
   document.getElementById("arena-question-tag").textContent = quiz.category;
   document.getElementById("arena-question-text").textContent = questionObj.question;
 
-  // Options lists
+  // Build options based on question type
   const optionsContainer = document.getElementById("arena-options-list");
   optionsContainer.innerHTML = "";
 
-  questionObj.options.forEach((optionText, idx) => {
-    const letter = String.fromCharCode(65 + idx); // A, B, C, D
-    const btn = document.createElement("button");
-    btn.className = "option-btn";
-    btn.innerHTML = `
-      <span class="option-letter">${letter}</span>
-      <span class="option-text">${optionText}</span>
-    `;
+  const qType = questionObj.type || "mcq";
+
+  if (qType === "truefalse") {
+    // True/False buttons
+    const row = document.createElement("div");
+    row.className = "tf-options-row";
     
-    btn.addEventListener("click", () => selectOption(idx));
-    optionsContainer.appendChild(btn);
-  });
+    ["True", "False"].forEach((label, idx) => {
+      const btn = document.createElement("button");
+      btn.className = "tf-btn";
+      btn.innerHTML = `<i data-lucide="${idx === 0 ? 'check-circle' : 'x-circle'}" size="24"></i> ${label}`;
+      btn.addEventListener("click", () => selectOption(idx));
+      row.appendChild(btn);
+    });
+    optionsContainer.appendChild(row);
+
+  } else if (qType === "short_answer") {
+    // Short answer input
+    const wrapper = document.createElement("div");
+    wrapper.className = "short-answer-wrapper";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "short-answer-input";
+    input.id = "arena-short-answer-input";
+    input.placeholder = "Type your answer here...";
+    input.autocomplete = "off";
+    input.addEventListener("input", () => {
+      selectedOptionIdx = input.value.trim();
+      document.getElementById("arena-action-btn").disabled = !input.value.trim();
+    });
+    wrapper.appendChild(input);
+    optionsContainer.appendChild(wrapper);
+
+  } else {
+    // MCQ (default)
+    questionObj.options.forEach((optionText, idx) => {
+      const letter = String.fromCharCode(65 + idx);
+      const btn = document.createElement("button");
+      btn.className = "option-btn";
+      btn.innerHTML = `
+        <span class="option-letter">${letter}</span>
+        <span class="option-text">${optionText}</span>
+      `;
+      btn.addEventListener("click", () => selectOption(idx));
+      optionsContainer.appendChild(btn);
+    });
+  }
 
   // Hide explanation
   document.getElementById("arena-explanation-panel").style.display = "none";
@@ -947,6 +1037,7 @@ function loadQuestion() {
   const actionBtn = document.getElementById("arena-action-btn");
   actionBtn.innerHTML = `Submit Answer <i data-lucide="check"></i>`;
   actionBtn.disabled = true;
+  selectedOptionIdx = -1;
   lucide.createIcons();
 
   // Reset & Start Timer
@@ -996,26 +1087,33 @@ function updateTimerUI() {
 let selectedOptionIdx = -1;
 
 function selectOption(optionIdx) {
-  // If timer or options are disabled, ignore
-  const buttons = document.querySelectorAll(".option-btn");
-  if (buttons[0].disabled) return;
+  const questions = state.gameplay.shuffledQuestions;
+  const qIdx = state.gameplay.currentQuestionIndex;
+  const questionObj = questions[qIdx];
+  const qType = questionObj.type || "mcq";
+
+  // Check if options are disabled
+  if (qType === "mcq") {
+    const buttons = document.querySelectorAll(".option-btn");
+    if (buttons.length > 0 && buttons[0].disabled) return;
+    buttons.forEach((btn, idx) => {
+      btn.classList.toggle("selected", idx === optionIdx);
+    });
+  } else if (qType === "truefalse") {
+    const buttons = document.querySelectorAll(".tf-btn");
+    if (buttons.length > 0 && buttons[0].disabled) return;
+    buttons.forEach((btn, idx) => {
+      btn.classList.toggle("selected", idx === optionIdx);
+    });
+  }
 
   selectedOptionIdx = optionIdx;
+  state.gameplay.selectedAnswers[qIdx] = optionIdx;
 
-  buttons.forEach((btn, idx) => {
-    if (idx === optionIdx) {
-      btn.classList.add("selected");
-    } else {
-      btn.classList.remove("selected");
-    }
-  });
-
-  // Enable action button
   document.getElementById("arena-action-btn").disabled = false;
 }
 
 function handleTimeOut() {
-  // Answer as incorrect since they ran out of time
   validateAnswer(-1);
 }
 
@@ -1025,15 +1123,13 @@ function setupQuizArenaHandlers() {
 
   actionBtn.addEventListener("click", () => {
     if (actionBtn.textContent.includes("Submit")) {
-      // Validate
       clearInterval(state.gameplay.timerInterval);
       validateAnswer(selectedOptionIdx);
     } else {
-      // Move on
       state.gameplay.currentQuestionIndex++;
-      const quiz = state.gameplay.activeQuiz;
+      const questions = state.gameplay.shuffledQuestions;
       
-      if (state.gameplay.currentQuestionIndex < quiz.questions.length) {
+      if (state.gameplay.currentQuestionIndex < questions.length) {
         loadQuestion();
       } else {
         finishQuiz();
@@ -1052,17 +1148,45 @@ function setupQuizArenaHandlers() {
 function validateAnswer(selectedIdx) {
   const quiz = state.gameplay.activeQuiz;
   const qIdx = state.gameplay.currentQuestionIndex;
-  const questionObj = quiz.questions[qIdx];
+  const questions = state.gameplay.shuffledQuestions;
+  const questionObj = questions[qIdx];
+  const qType = questionObj.type || "mcq";
   const correctIdx = questionObj.answer;
   
-  const buttons = document.querySelectorAll(".option-btn");
-  
-  // Disable all options
-  buttons.forEach(btn => btn.disabled = true);
+  let isCorrect = false;
 
-  const isCorrect = selectedIdx === correctIdx;
-  const explanationPanel = document.getElementById("arena-explanation-panel");
-  const explanationText = document.getElementById("arena-explanation-text");
+  if (qType === "short_answer") {
+    // Compare strings case-insensitively
+    const userAnswer = typeof selectedIdx === "string" ? selectedIdx.trim().toLowerCase() : "";
+    const correctAnswer = (questionObj.correctText || "").trim().toLowerCase();
+    isCorrect = userAnswer === correctAnswer;
+    
+    const input = document.getElementById("arena-short-answer-input");
+    if (input) {
+      input.disabled = true;
+      input.classList.add(isCorrect ? "correct" : "incorrect");
+      if (!isCorrect) {
+        const label = document.createElement("div");
+        label.className = "short-answer-correct-label";
+        label.textContent = `Correct answer: ${questionObj.correctText}`;
+        input.parentElement.appendChild(label);
+      }
+    }
+  } else {
+    // MCQ or True/False
+    isCorrect = selectedIdx === correctIdx;
+    
+    const btnClass = qType === "truefalse" ? ".tf-btn" : ".option-btn";
+    const buttons = document.querySelectorAll(btnClass);
+    buttons.forEach(btn => btn.disabled = true);
+
+    if (isCorrect) {
+      if (selectedIdx >= 0) buttons[selectedIdx].classList.add("correct");
+    } else {
+      if (selectedIdx >= 0) buttons[selectedIdx].classList.add("incorrect");
+      buttons[correctIdx].classList.add("correct");
+    }
+  }
 
   // Record Answer Log
   state.gameplay.answersLog.push({
@@ -1087,7 +1211,6 @@ function validateAnswer(selectedIdx) {
     const timeLimit = quiz.timeLimit;
     const timeRatio = Math.max(0, 1 - (timeUsed / timeLimit));
     
-    // Speed Demon check (answered in under 20% of the limit time limit)
     if (timeRatio > 0.8) {
       unlockBadge("speed_demon");
     }
@@ -1098,11 +1221,6 @@ function validateAnswer(selectedIdx) {
 
     state.gameplay.score += earnedXp;
 
-    // Show correct visual state
-    if (selectedIdx >= 0) {
-      buttons[selectedIdx].classList.add("correct");
-    }
-
     // Streak UI animation
     const streakBox = document.getElementById("arena-streak");
     document.getElementById("arena-streak-val").textContent = state.gameplay.streak;
@@ -1110,18 +1228,13 @@ function validateAnswer(selectedIdx) {
       streakBox.classList.add("active");
     }
   } else {
-    // Break streak
     state.gameplay.streak = 0;
     document.getElementById("arena-streak").classList.remove("active");
-
-    // Show failure states
-    if (selectedIdx >= 0) {
-      buttons[selectedIdx].classList.add("incorrect");
-    }
-    buttons[correctIdx].classList.add("correct");
   }
 
   // Populate & Reveal Explanation
+  const explanationPanel = document.getElementById("arena-explanation-panel");
+  const explanationText = document.getElementById("arena-explanation-text");
   explanationText.textContent = questionObj.explanation || "No explanation details provided.";
   explanationPanel.style.display = "block";
 
@@ -1131,7 +1244,7 @@ function validateAnswer(selectedIdx) {
 
   // Modify action button
   const actionBtn = document.getElementById("arena-action-btn");
-  const isLastQuestion = qIdx === quiz.questions.length - 1;
+  const isLastQuestion = qIdx === questions.length - 1;
   if (isLastQuestion) {
     actionBtn.innerHTML = `Finish Quiz <i data-lucide="award"></i>`;
   } else {
@@ -1145,17 +1258,18 @@ function validateAnswer(selectedIdx) {
 function finishQuiz() {
   const gameplay = state.gameplay;
   const quiz = gameplay.activeQuiz;
+  const questions = gameplay.shuffledQuestions;
   const elapsedSeconds = Math.round((Date.now() - gameplay.startTime) / 1000);
   const minutes = Math.floor(elapsedSeconds / 60);
   const seconds = elapsedSeconds % 60;
   const formattedTime = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 
-  const accuracyPct = Math.round((gameplay.correctCount / quiz.questions.length) * 100);
+  const accuracyPct = Math.round((gameplay.correctCount / questions.length) * 100);
 
   // Update global user stats
   state.user.xp += gameplay.score;
   state.user.quizzesCompleted += 1;
-  state.user.totalAnswers += quiz.questions.length;
+  state.user.totalAnswers += questions.length;
   state.user.correctAnswers += gameplay.correctCount;
 
   // Badge updates based on performance
@@ -1176,9 +1290,37 @@ function finishQuiz() {
   // Persist User updates
   saveUserProfile();
 
+  // Record attempt history
+  const passingScore = quiz.passingScore || 50;
+  const passed = accuracyPct >= passingScore;
+  const attemptRecord = {
+    quizId: quiz.id,
+    quizTitle: quiz.title,
+    category: quiz.category,
+    score: gameplay.score,
+    correctCount: gameplay.correctCount,
+    totalQuestions: questions.length,
+    accuracyPct: accuracyPct,
+    passed: passed,
+    passingScore: passingScore,
+    maxStreak: gameplay.maxStreak,
+    timeTaken: formattedTime,
+    timestamp: new Date().toISOString(),
+    answersLog: gameplay.answersLog
+  };
+  state.attemptHistory.unshift(attemptRecord);
+  saveAttemptHistory();
+
+  // Toast notification
+  if (passed) {
+    showToast(`Quiz completed! You passed with ${accuracyPct}% accuracy.`, "success");
+  } else {
+    showToast(`Quiz completed. You scored ${accuracyPct}% (need ${passingScore}% to pass).`, "warning");
+  }
+
   // Populate Results Screen
   document.getElementById("res-stat-xp").textContent = `+${gameplay.score} XP`;
-  document.getElementById("res-stat-correct").textContent = `${gameplay.correctCount}/${quiz.questions.length}`;
+  document.getElementById("res-stat-correct").textContent = `${gameplay.correctCount}/${questions.length}`;
   document.getElementById("res-stat-time").textContent = formattedTime;
   document.getElementById("res-stat-streak").textContent = gameplay.maxStreak;
   
@@ -1389,6 +1531,11 @@ function setupQuizCreatorHandlers() {
 
     // Save custom quiz
     const uniqueId = `quiz-custom-${Date.now()}`;
+    const passingScore = parseInt(document.getElementById("c-passing-score").value) || 50;
+    const maxAttempts = parseInt(document.getElementById("c-max-attempts").value) || 0;
+    const shuffleQuestions = document.getElementById("c-shuffle-questions").checked;
+    const shuffleAnswers = document.getElementById("c-shuffle-answers").checked;
+
     const newQuiz = {
       id: uniqueId,
       title: title,
@@ -1396,11 +1543,15 @@ function setupQuizCreatorHandlers() {
       category: category,
       difficulty: difficulty,
       timeLimit: timeLimit,
+      passingScore: passingScore,
+      maxAttempts: maxAttempts,
+      shuffleQuestions: shuffleQuestions,
+      shuffleAnswers: shuffleAnswers,
       questions: parsedQuestions
     };
 
     saveCustomQuiz(newQuiz);
-    alert(`Success! '${title}' has been successfully published to your Dashboard.`);
+    showToast(`'${title}' has been published to your Dashboard!`, "success");
     
     // Reset and return
     resetCreator();
@@ -1524,3 +1675,407 @@ function removeQuestionBlock(qNum) {
     lucide.createIcons();
   }
 }
+
+// =========================================
+// NEW FEATURES
+// =========================================
+
+// --- TOAST NOTIFICATION SYSTEM ---
+function showToast(message, type = "info") {
+  const container = document.getElementById("toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  
+  const icons = { success: "check-circle", error: "x-circle", warning: "alert-triangle", info: "info" };
+  toast.innerHTML = `<i data-lucide="${icons[type] || 'info'}" class="toast-icon"></i> <span>${message}</span>`;
+  container.appendChild(toast);
+  lucide.createIcons();
+
+  setTimeout(() => {
+    toast.classList.add("removing");
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
+// --- ATTEMPT HISTORY PERSISTENCE ---
+function loadAttemptHistory() {
+  const raw = localStorage.getItem("quizmania_attempt_history");
+  if (raw) {
+    try { state.attemptHistory = JSON.parse(raw); } catch (e) { state.attemptHistory = []; }
+  }
+}
+
+function saveAttemptHistory() {
+  localStorage.setItem("quizmania_attempt_history", JSON.stringify(state.attemptHistory));
+}
+
+function renderAttemptHistory() {
+  const tbody = document.getElementById("history-table-body");
+  const empty = document.getElementById("history-empty-state");
+  tbody.innerHTML = "";
+
+  if (state.attemptHistory.length === 0) {
+    empty.style.display = "block";
+    tbody.parentElement.style.display = "none";
+    return;
+  }
+
+  empty.style.display = "none";
+  tbody.parentElement.style.display = "table";
+
+  state.attemptHistory.forEach(a => {
+    const tr = document.createElement("tr");
+    const date = new Date(a.timestamp);
+    const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    tr.innerHTML = `
+      <td style="font-weight: 600;">${a.quizTitle}</td>
+      <td><span class="quiz-category">${a.category}</span></td>
+      <td style="font-weight: 700; color: var(--accent-blue);">+${a.score} XP</td>
+      <td>${a.accuracyPct}% (${a.correctCount}/${a.totalQuestions})</td>
+      <td><span class="review-badge ${a.passed ? 'correct' : 'incorrect'}">${a.passed ? 'PASSED' : 'FAILED'}</span></td>
+      <td style="color: var(--text-muted);">${dateStr}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function setupHistoryHandlers() {
+  document.getElementById("clear-history-btn").addEventListener("click", () => {
+    if (confirm("Clear all attempt history? This cannot be undone.")) {
+      state.attemptHistory = [];
+      saveAttemptHistory();
+      renderAttemptHistory();
+      showToast("Attempt history cleared.", "info");
+    }
+  });
+}
+
+// --- ADMIN ANALYTICS DASHBOARD ---
+function renderAnalyticsDashboard() {
+  const grid = document.getElementById("admin-stats-grid");
+  const hardestList = document.getElementById("hardest-questions-list");
+  grid.innerHTML = "";
+  hardestList.innerHTML = "";
+
+  const history = state.attemptHistory;
+  const totalAttempts = history.length;
+  const avgScore = totalAttempts > 0 ? Math.round(history.reduce((s, a) => s + a.accuracyPct, 0) / totalAttempts) : 0;
+  const completionRate = totalAttempts > 0 ? Math.round((history.filter(a => a.passed).length / totalAttempts) * 100) : 0;
+  const totalXpEarned = history.reduce((s, a) => s + a.score, 0);
+
+  const stats = [
+    { icon: "📊", val: totalAttempts, lbl: "Total Attempts" },
+    { icon: "🎯", val: `${avgScore}%`, lbl: "Avg Accuracy" },
+    { icon: "✅", val: `${completionRate}%`, lbl: "Pass Rate" },
+    { icon: "⚡", val: totalXpEarned.toLocaleString(), lbl: "Total XP Earned" }
+  ];
+
+  stats.forEach(s => {
+    const card = document.createElement("div");
+    card.className = "admin-stat-card glass";
+    card.innerHTML = `
+      <div class="admin-stat-icon">${s.icon}</div>
+      <div class="admin-stat-val">${s.val}</div>
+      <div class="admin-stat-lbl">${s.lbl}</div>
+    `;
+    grid.appendChild(card);
+  });
+
+  // Find hardest questions from history
+  const questionStats = {};
+  history.forEach(attempt => {
+    if (!attempt.answersLog) return;
+    attempt.answersLog.forEach(log => {
+      if (!questionStats[log.question]) {
+        questionStats[log.question] = { correct: 0, total: 0 };
+      }
+      questionStats[log.question].total++;
+      if (log.isCorrect) questionStats[log.question].correct++;
+    });
+  });
+
+  const sorted = Object.entries(questionStats)
+    .map(([q, s]) => ({ question: q, rate: Math.round((s.correct / s.total) * 100), total: s.total }))
+    .sort((a, b) => a.rate - b.rate)
+    .slice(0, 8);
+
+  if (sorted.length === 0) {
+    hardestList.innerHTML = '<p style="color: var(--text-muted); padding: 20px;">Complete some quizzes to see analytics here.</p>';
+    return;
+  }
+
+  sorted.forEach(item => {
+    const rateClass = item.rate < 40 ? "bad" : item.rate < 70 ? "ok" : "good";
+    const row = document.createElement("div");
+    row.className = "hardest-question-row";
+    row.innerHTML = `
+      <span class="hardest-q-text">${item.question.length > 80 ? item.question.slice(0, 80) + '…' : item.question}</span>
+      <span class="hardest-q-rate ${rateClass}">${item.rate}% success (${item.total} attempts)</span>
+    `;
+    hardestList.appendChild(row);
+  });
+}
+
+// --- ANTI-CHEAT: TAB SWITCH DETECTION ---
+function setupAntiCheat() {
+  const overlay = document.getElementById("anticheat-overlay");
+  const counter = document.getElementById("anticheat-counter");
+  const resumeBtn = document.getElementById("anticheat-resume-btn");
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && state.currentView === "arena-view") {
+      state.gameplay.tabSwitchCount++;
+      clearInterval(state.gameplay.timerInterval);
+
+      counter.textContent = `Warnings: ${state.gameplay.tabSwitchCount} / 3`;
+      overlay.classList.add("active");
+
+      if (state.gameplay.tabSwitchCount >= 3) {
+        overlay.querySelector(".anticheat-text").textContent = "You have exceeded the maximum tab-switch warnings. Your quiz has been automatically submitted.";
+        resumeBtn.textContent = "View Results";
+        resumeBtn.onclick = () => {
+          overlay.classList.remove("active");
+          finishQuiz();
+        };
+      }
+    }
+  });
+
+  resumeBtn.addEventListener("click", () => {
+    if (state.gameplay.tabSwitchCount < 3) {
+      overlay.classList.remove("active");
+      startTimer();
+    }
+  });
+}
+
+// --- REVIEW BEFORE SUBMIT MODAL ---
+function setupReviewModal() {
+  const modal = document.getElementById("review-modal");
+  const closeBtn = document.getElementById("review-modal-close");
+  const backBtn = document.getElementById("review-modal-back");
+  const submitBtn = document.getElementById("review-modal-submit");
+
+  closeBtn.addEventListener("click", () => modal.classList.remove("active"));
+  backBtn.addEventListener("click", () => modal.classList.remove("active"));
+  
+  submitBtn.addEventListener("click", () => {
+    modal.classList.remove("active");
+    finishQuiz();
+  });
+}
+
+function showReviewModal() {
+  const modal = document.getElementById("review-modal");
+  const list = document.getElementById("review-summary-list");
+  list.innerHTML = "";
+
+  const questions = state.gameplay.shuffledQuestions;
+  
+  questions.forEach((q, idx) => {
+    const selected = state.gameplay.selectedAnswers[idx];
+    const qType = q.type || "mcq";
+    let answerText = "Not answered";
+    let isAnswered = selected !== undefined && selected !== -1;
+
+    if (isAnswered) {
+      if (qType === "short_answer") {
+        answerText = typeof selected === "string" ? selected : "Typed answer";
+      } else if (qType === "truefalse") {
+        answerText = selected === 0 ? "True" : "False";
+      } else {
+        answerText = q.options[selected] || "Selected";
+      }
+    }
+
+    const item = document.createElement("div");
+    item.className = `review-summary-item ${isAnswered ? 'answered' : 'unanswered'}`;
+    item.innerHTML = `
+      <span class="review-summary-q-label">Q${idx + 1}: ${q.question.length > 50 ? q.question.slice(0, 50) + '…' : q.question}</span>
+      <span class="review-summary-answer">${answerText}</span>
+    `;
+    item.addEventListener("click", () => {
+      modal.classList.remove("active");
+      state.gameplay.currentQuestionIndex = idx;
+      loadQuestion();
+    });
+    list.appendChild(item);
+  });
+
+  modal.classList.add("active");
+  lucide.createIcons();
+}
+
+// --- SHARE QUIZ MODAL ---
+function setupShareModal() {
+  const modal = document.getElementById("share-modal");
+  const closeBtn = document.getElementById("share-modal-close");
+  const copyBtn = document.getElementById("share-copy-btn");
+
+  closeBtn.addEventListener("click", () => modal.classList.remove("active"));
+
+  copyBtn.addEventListener("click", () => {
+    const input = document.getElementById("share-link-input");
+    input.select();
+    navigator.clipboard.writeText(input.value).then(() => {
+      showToast("Link copied to clipboard!", "success");
+    }).catch(() => {
+      document.execCommand("copy");
+      showToast("Link copied!", "success");
+    });
+  });
+}
+
+function openShareModal(quizId) {
+  const shareUrl = `${window.location.origin}${window.location.pathname}?quiz=${quizId}`;
+  document.getElementById("share-link-input").value = shareUrl;
+  document.getElementById("share-modal").classList.add("active");
+  lucide.createIcons();
+}
+
+// --- CSV IMPORT / EXPORT ---
+function setupCSVHandlers() {
+  const dropZone = document.getElementById("csv-drop-zone");
+  const fileInput = document.getElementById("csv-file-input");
+  const exportBtn = document.getElementById("csv-export-btn");
+  const templateBtn = document.getElementById("csv-template-btn");
+
+  dropZone.addEventListener("click", () => fileInput.click());
+  
+  dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+  
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+  
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.endsWith(".csv")) importCSV(file);
+    else showToast("Please drop a .csv file.", "error");
+  });
+
+  fileInput.addEventListener("change", (e) => {
+    if (e.target.files[0]) importCSV(e.target.files[0]);
+  });
+
+  exportBtn.addEventListener("click", () => exportCSV());
+  templateBtn.addEventListener("click", () => downloadCSVTemplate());
+}
+
+function importCSV(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const lines = e.target.result.split("\n").filter(l => l.trim());
+    if (lines.length < 2) { showToast("CSV file is empty or invalid.", "error"); return; }
+
+    const questions = [];
+    // Expected format: question,optionA,optionB,optionC,optionD,correctIndex,explanation
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, ''));
+      if (cols.length < 6) continue;
+
+      questions.push({
+        question: cols[0],
+        options: [cols[1], cols[2], cols[3], cols[4]],
+        answer: parseInt(cols[5]) || 0,
+        explanation: cols[6] || ""
+      });
+    }
+
+    if (questions.length === 0) { showToast("No valid questions found in CSV.", "error"); return; }
+
+    // Add as question blocks in the creator
+    const container = document.getElementById("creator-questions-list");
+    questions.forEach(q => {
+      addQuestionBlock();
+      const blocks = container.querySelectorAll(".question-builder-item");
+      const lastBlock = blocks[blocks.length - 1];
+      
+      lastBlock.querySelector(".q-text-input").value = q.question;
+      const opts = lastBlock.querySelectorAll(".opt-text-input");
+      q.options.forEach((opt, i) => { if (opts[i]) opts[i].value = opt; });
+      
+      const radios = lastBlock.querySelectorAll(".opt-radio-input");
+      radios.forEach((r, i) => r.checked = (i === q.answer));
+      
+      const expInput = lastBlock.querySelector(".q-explanation-input");
+      if (expInput) expInput.value = q.explanation;
+    });
+
+    showToast(`Imported ${questions.length} questions from CSV.`, "success");
+  };
+  reader.readAsText(file);
+}
+
+function exportCSV() {
+  const blocks = document.querySelectorAll(".question-builder-item");
+  if (blocks.length === 0) { showToast("No questions to export.", "warning"); return; }
+
+  let csv = "question,optionA,optionB,optionC,optionD,correctIndex,explanation\n";
+  
+  blocks.forEach(block => {
+    const qText = block.querySelector(".q-text-input").value.trim();
+    const opts = [...block.querySelectorAll(".opt-text-input")].map(i => i.value.trim());
+    const radios = block.querySelectorAll(".opt-radio-input");
+    let correctIdx = 0;
+    radios.forEach((r, i) => { if (r.checked) correctIdx = i; });
+    const explanation = block.querySelector(".q-explanation-input").value.trim();
+    
+    csv += `"${qText}","${opts[0] || ''}","${opts[1] || ''}","${opts[2] || ''}","${opts[3] || ''}",${correctIdx},"${explanation}"\n`;
+  });
+
+  downloadFile("quiz_questions.csv", csv, "text/csv");
+  showToast("Questions exported as CSV.", "success");
+}
+
+function downloadCSVTemplate() {
+  const template = `question,optionA,optionB,optionC,optionD,correctIndex,explanation
+"What is 2+2?","3","4","5","6",1,"2+2 equals 4"
+"Is the sky blue?","True","False","","",0,"The sky appears blue due to Rayleigh scattering"`;
+  downloadFile("quiz_template.csv", template, "text/csv");
+  showToast("CSV template downloaded.", "info");
+}
+
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// --- ADD SHARE BUTTON TO QUIZ CARDS ---
+const origRenderDashboard = renderDashboard;
+renderDashboard = function() {
+  origRenderDashboard();
+  
+  // Add share buttons after rendering
+  document.querySelectorAll(".quiz-card").forEach((card, idx) => {
+    const quiz = state.quizzes[idx];
+    if (!quiz) return;
+    
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
+    
+    const shareBtn = document.createElement("button");
+    shareBtn.className = "btn btn-secondary";
+    shareBtn.style.fontSize = "13px";
+    shareBtn.innerHTML = `<i data-lucide="share-2" size="14"></i> Share`;
+    shareBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openShareModal(quiz.id);
+    });
+    btnRow.appendChild(shareBtn);
+    card.appendChild(btnRow);
+  });
+  
+  lucide.createIcons();
+};

@@ -38,6 +38,12 @@
           <li class="nav-item" data-target="badges-view">
             <a href="#"><i data-lucide="award" size="18"></i>Badges</a>
           </li>
+          <li class="nav-item" data-target="analytics-view">
+            <a href="#"><i data-lucide="bar-chart-3" size="18"></i>Analytics</a>
+          </li>
+          <li class="nav-item" data-target="history-view">
+            <a href="#"><i data-lucide="history" size="18"></i>History</a>
+          </li>
           <li class="nav-item" data-target="creator-view">
             <a href="#"><i data-lucide="plus-circle" size="18"></i>Create Quiz</a>
           </li>
@@ -367,6 +373,60 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Quiz Configuration Extras -->
+              <div style="margin-top: 24px; border-top: 1px solid var(--surface-border); padding-top: 20px;">
+                <h4 style="margin-bottom: 12px; font-size: 15px;"><i data-lucide="sliders" size="16" style="color: var(--accent-blue);"></i> Advanced Settings</h4>
+                
+                <div class="creator-row-2col">
+                  <div class="creator-form-group">
+                    <label class="creator-label" for="c-passing-score">Passing Score (%)</label>
+                    <input class="creator-input" type="number" id="c-passing-score" value="50" min="0" max="100" placeholder="50">
+                  </div>
+                  <div class="creator-form-group">
+                    <label class="creator-label" for="c-max-attempts">Max Attempts (0 = unlimited)</label>
+                    <input class="creator-input" type="number" id="c-max-attempts" value="0" min="0" max="100" placeholder="0">
+                  </div>
+                </div>
+
+                <div class="config-toggle-row">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="c-shuffle-questions" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span class="toggle-label">Shuffle question order on each attempt</span>
+                </div>
+
+                <div class="config-toggle-row">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="c-shuffle-answers" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span class="toggle-label">Shuffle answer option order</span>
+                </div>
+              </div>
+
+              <!-- CSV Import / Export -->
+              <div style="margin-top: 24px; border-top: 1px solid var(--surface-border); padding-top: 20px;">
+                <h4 style="margin-bottom: 8px; font-size: 15px;"><i data-lucide="file-spreadsheet" size="16" style="color: var(--success-color);"></i> Import / Export Questions</h4>
+                <p style="font-size: 13px; margin-bottom: 16px;">Upload a CSV file to bulk-add questions, or export the current quiz as CSV.</p>
+                <div class="csv-section">
+                  <div class="csv-drop-zone" id="csv-drop-zone">
+                    <div class="csv-drop-icon">📄</div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">Drop CSV file here</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">or click to browse</div>
+                    <input type="file" class="csv-file-input" id="csv-file-input" accept=".csv">
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 12px; justify-content: center;">
+                    <button class="btn btn-secondary" type="button" style="width: auto;" id="csv-export-btn">
+                      <i data-lucide="download"></i> Export as CSV
+                    </button>
+                    <button class="btn btn-secondary" type="button" style="width: auto;" id="csv-template-btn">
+                      <i data-lucide="file-text"></i> Download Template
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Dynamic Question List Builder -->
@@ -390,8 +450,112 @@
         </div>
       </section>
 
+      <!-- 7. ADMIN ANALYTICS VIEW -->
+      <section id="analytics-view" class="view">
+        <div class="full-width-panel glass">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <h1 class="text-gradient">Admin Analytics Dashboard</h1>
+              <p>Aggregate performance metrics across all quizzes and participants.</p>
+            </div>
+          </div>
+
+          <div class="admin-stats-grid" id="admin-stats-grid">
+            <!-- Dynamically Populated -->
+          </div>
+
+          <h3 style="margin-top: 24px;"><i data-lucide="alert-triangle" size="18" style="color: var(--warning-color);"></i> Hardest Questions (Lowest Success Rate)</h3>
+          <div class="hardest-questions-list" id="hardest-questions-list">
+            <!-- Dynamically Populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. ATTEMPT HISTORY VIEW -->
+      <section id="history-view" class="view">
+        <div class="full-width-panel glass">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <h1 class="text-gradient">Attempt History</h1>
+              <p>Track your past quiz attempts with scores, timestamps, and pass/fail status.</p>
+            </div>
+            <button class="btn btn-secondary" style="width: auto;" id="clear-history-btn">
+              <i data-lucide="trash-2"></i> Clear History
+            </button>
+          </div>
+
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Quiz Title</th>
+                <th>Category</th>
+                <th>Score</th>
+                <th>Accuracy</th>
+                <th>Result</th>
+                <th>Date & Time</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <!-- Dynamically Populated -->
+            </tbody>
+          </table>
+
+          <div id="history-empty-state" style="display: none; text-align: center; padding: 60px 24px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
+            <h3 style="margin-bottom: 8px;">No Attempts Yet</h3>
+            <p>Complete a quiz to see your history here.</p>
+          </div>
+        </div>
+      </section>
+
     </main>
 
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ANTI-CHEAT TAB-SWITCH OVERLAY -->
+  <div class="anticheat-overlay" id="anticheat-overlay">
+    <div class="anticheat-icon">🛡️</div>
+    <h2 class="anticheat-title">Tab Switch Detected!</h2>
+    <p class="anticheat-text">Switching tabs or windows during a quiz is not allowed. Please stay on this page to continue your quiz.</p>
+    <div class="anticheat-counter" id="anticheat-counter">Warnings: 0 / 3</div>
+    <button class="btn btn-primary" style="width: auto;" id="anticheat-resume-btn">Resume Quiz</button>
+  </div>
+
+  <!-- REVIEW BEFORE SUBMIT MODAL -->
+  <div class="modal-overlay" id="review-modal">
+    <div class="modal-box glass">
+      <div class="modal-header">
+        <h2>Review Your Answers</h2>
+        <button class="modal-close-btn" id="review-modal-close"><i data-lucide="x" size="20"></i></button>
+      </div>
+      <p style="margin-bottom: 16px;">Review all your selections before submitting. Click any question to jump back to it.</p>
+      <div class="review-summary-panel glass" id="review-summary-list">
+        <!-- Dynamically Populated -->
+      </div>
+      <div style="display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end;">
+        <button class="btn btn-secondary" style="width: auto;" id="review-modal-back">Go Back</button>
+        <button class="btn btn-primary" style="width: auto;" id="review-modal-submit"><i data-lucide="send"></i> Confirm & Submit All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHARE QUIZ MODAL -->
+  <div class="modal-overlay" id="share-modal">
+    <div class="modal-box glass">
+      <div class="modal-header">
+        <h2>Share This Quiz</h2>
+        <button class="modal-close-btn" id="share-modal-close"><i data-lucide="x" size="20"></i></button>
+      </div>
+      <p>Share this quiz with friends using the link below. They can open it in any browser.</p>
+      <div class="share-link-row">
+        <input type="text" class="share-link-input" id="share-link-input" readonly>
+        <button class="btn-icon" id="share-copy-btn" data-tooltip="Copy to clipboard"><i data-lucide="copy" size="18"></i></button>
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); margin-top: 12px;">Note: Quiz data is embedded in the URL so the recipient doesn't need an account.</p>
+    </div>
   </div>
 
   <script src="app.js"></script>
