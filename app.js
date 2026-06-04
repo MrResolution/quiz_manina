@@ -2458,7 +2458,6 @@ function showHostPodium() {
     `;
     lucide.createIcons();
   }
-  }
   
   document.getElementById("host-game-next-btn").style.display = "none";
 }
