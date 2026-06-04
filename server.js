@@ -287,6 +287,39 @@ app.post('/api/quizzes/create', async (req, res) => {
   }
 });
 
+// Delete Quiz
+app.delete('/api/quizzes/:id', async (req, res) => {
+  const { id } = req.params;
+  const username = req.body.username || req.query.username;
+  
+  try {
+    const quizCheck = await pool.query('SELECT created_by FROM quizzes WHERE id = $1', [id]);
+    if (quizCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Quiz not found.' });
+    }
+    
+    const quiz = quizCheck.rows[0];
+    
+    if (username) {
+      const userCheck = await pool.query('SELECT role FROM users WHERE username = $1', [username]);
+      const user = userCheck.rows[0];
+      
+      const isCreator = quiz.created_by && quiz.created_by.toLowerCase() === username.toLowerCase();
+      const isTeacher = user && user.role === 'teacher';
+      
+      if (!isCreator && !isTeacher) {
+        return res.status(403).json({ error: 'You do not have permission to delete this quiz.' });
+      }
+    }
+    
+    await pool.query('DELETE FROM quizzes WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Quiz deleted successfully.' });
+  } catch (error) {
+    console.error('Error deleting quiz:', error);
+    res.status(500).json({ error: 'Server error deleting quiz.' });
+  }
+});
+
 // ==========================================
 // ATTEMPTS & ANALYTICS ENDPOINTS
 // ==========================================

@@ -415,6 +415,14 @@ function renderDashboard() {
          </button>`
       : "";
 
+    const isCreator = quiz.createdBy && state.user.username && quiz.createdBy.toLowerCase() === state.user.username.toLowerCase();
+    const canDelete = isCreator || isTeacher;
+    const deleteButtonHtml = canDelete 
+      ? `<button class="btn btn-danger delete-quiz-btn" data-id="${quiz.id}" style="margin-top: 8px; width: 100%;">
+           Delete Quiz <i data-lucide="trash-2" size="16"></i>
+         </button>`
+      : "";
+
     card.innerHTML = `
       <div class="quiz-meta-top">
         <span class="quiz-category">${quiz.category}</span>
@@ -441,6 +449,7 @@ function renderDashboard() {
         Start Challenge <i data-lucide="play" size="16"></i>
       </button>
       ${hostButtonHtml}
+      ${deleteButtonHtml}
     `;
     quizzesContainer.appendChild(card);
   });
@@ -458,6 +467,44 @@ function renderDashboard() {
     btn.addEventListener("click", () => {
       const quizId = btn.getAttribute("data-id");
       hostQuiz(quizId);
+    });
+  });
+
+  // Attach delete listeners
+  document.querySelectorAll(".delete-quiz-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const quizId = btn.getAttribute("data-id");
+      const quiz = state.quizzes.find(q => q.id === quizId);
+      const title = quiz ? quiz.title : "this quiz";
+      
+      if (confirm(`Are you sure you want to permanently delete "${title}"? This cannot be undone.`)) {
+        if (quizId.startsWith('custom-')) {
+          state.quizzes = state.quizzes.filter(q => q.id !== quizId);
+          showToast("Quiz deleted successfully!", "success");
+          renderDashboard();
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/quizzes/${quizId}?username=${encodeURIComponent(state.user.username)}`, {
+            method: 'DELETE'
+          });
+          
+          if (res.ok) {
+            showToast("Quiz deleted successfully!", "success");
+            await loadQuizzes();
+            renderDashboard();
+          } else {
+            const err = await res.json();
+            showToast(`Error deleting quiz: ${err.error || 'Server error'}`, "error");
+          }
+        } catch (e) {
+          console.warn("Failed to delete quiz on server, removing locally:", e);
+          state.quizzes = state.quizzes.filter(q => q.id !== quizId);
+          showToast("Quiz deleted locally!", "success");
+          renderDashboard();
+        }
+      }
     });
   });
 }
