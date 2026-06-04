@@ -95,7 +95,8 @@ let state = {
     currentQuestionIndex: 0,
     participants: []
   },
-  currentView: "dashboard-view"
+  currentView: "dashboard-view",
+  listenersSetup: false
 };
 
 // --- INITIALIZATION ---
@@ -111,18 +112,22 @@ async function initApp() {
   renderDashboard();
   renderMiniLeaderboard();
   renderMiniBadges();
-  setupNavigation();
-  setupDashboardControls();
-  setupQuizArenaHandlers();
-  setupQuizCreatorHandlers();
-  setupResultsHandlers();
-  setupAntiCheat();
-  setupReviewModal();
-  setupShareModal();
-  setupCSVHandlers();
-  setupHistoryHandlers();
-  setupLoginHandlers();
-  setupMultiplayerHandlers();
+  
+  if (!state.listenersSetup) {
+    setupNavigation();
+    setupDashboardControls();
+    setupQuizArenaHandlers();
+    setupQuizCreatorHandlers();
+    setupResultsHandlers();
+    setupAntiCheat();
+    setupReviewModal();
+    setupShareModal();
+    setupCSVHandlers();
+    setupHistoryHandlers();
+    setupLoginHandlers();
+    setupMultiplayerHandlers();
+    state.listenersSetup = true;
+  }
   
   // Render Lucide icons
   lucide.createIcons();
