@@ -8,11 +8,10 @@ const PORT = 8080;
 
 // PostgreSQL Connection Pool Configuration
 const pool = new Pool({
-  user: 'quizmania',
-  host: '127.0.0.1',
-  database: 'quizmania_db',
-  password: 'quizmania',
-  port: 5434, // Custom docker port
+  connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_qb7sAUvSVt0e@ep-floral-mouse-aohyrhki-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 // Middleware
@@ -22,9 +21,9 @@ app.use(express.static(path.join(__dirname))); // Serve frontend directly from r
 // Test Connection
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
-    console.error('Database connection error:', err);
+    console.error('Database connection warning (Make sure your network allows outbound port 5432):', err.message);
   } else {
-    console.log('Database connected successfully. Current Time:', res.rows[0].now);
+    console.log('Database connected successfully to Neon. Current Time:', res.rows[0].now);
   }
 });
 
