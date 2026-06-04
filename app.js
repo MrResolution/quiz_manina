@@ -8,49 +8,49 @@ const BADGES = [
     id: "first_quiz",
     title: "Initiation Badge",
     description: "Complete your first quiz on QuizMania.",
-    icon: "🚀"
+    icon: "rocket"
   },
   {
     id: "perfect_score",
     title: "Trivia King",
     description: "Score 100% on any quiz.",
-    icon: "👑"
+    icon: "crown"
   },
   {
     id: "speed_demon",
     title: "Speed Demon",
     description: "Answer a question with more than 80% time remaining.",
-    icon: "⚡"
+    icon: "zap"
   },
   {
     id: "streak_5",
     title: "Unstoppable",
     description: "Achieve a correct answer streak of 5.",
-    icon: "🔥"
+    icon: "flame"
   },
   {
     id: "streak_10",
     title: "Omniscient",
     description: "Achieve a correct answer streak of 10.",
-    icon: "🔮"
+    icon: "sparkles"
   },
   {
     id: "quiz_creator",
     title: "Grand Builder",
     description: "Create and publish a custom quiz.",
-    icon: "🛠️"
+    icon: "wrench"
   },
   {
     id: "tech_master",
     title: "Silicon Valley Elite",
     description: "Score 80% or higher on a Tech quiz.",
-    icon: "💻"
+    icon: "laptop"
   },
   {
     id: "space_explorer",
     title: "Interstellar Mind",
     description: "Score 80% or higher on a Science/Space quiz.",
-    icon: "🌌"
+    icon: "orbit"
   }
 ];
 
@@ -539,10 +539,11 @@ function renderMiniBadges() {
     const isUnlocked = state.user.badges.includes(badge.id);
     const mini = document.createElement("div");
     mini.className = `badge-mini ${isUnlocked ? '' : 'locked'}`;
-    mini.innerHTML = badge.icon;
+    mini.innerHTML = `<i data-lucide="${badge.icon}" style="width: 18px; height: 18px;"></i>`;
     mini.setAttribute("data-tooltip", `${badge.title}: ${badge.description} (${isUnlocked ? 'Unlocked' : 'Locked'})`);
     container.appendChild(mini);
   });
+  lucide.createIcons();
 }
 
 // --- RENDER FULL LEADERBOARD VIEW ---
@@ -602,13 +603,14 @@ function renderBadgesGallery() {
     card.className = `badge-card glass ${isUnlocked ? '' : 'locked'}`;
 
     card.innerHTML = `
-      <div class="badge-card-icon">${badge.icon}</div>
+      <div class="badge-card-icon"><i data-lucide="${badge.icon}" style="width: 32px; height: 32px;"></i></div>
       <div class="badge-card-title">${badge.title}</div>
       <div class="badge-card-desc">${badge.description}</div>
       <span class="badge-status-tag">${isUnlocked ? 'Unlocked' : 'Locked'}</span>
     `;
     container.appendChild(card);
   });
+  lucide.createIcons();
 }
 
 // --- QUIZ GAMEPLAY CORE (ARENA) ---
@@ -1089,16 +1091,16 @@ async function finishQuiz() {
   const resIcon = document.getElementById("results-icon");
   const resHeading = document.getElementById("results-heading");
   if (accuracyPct === 100) {
-    resIcon.textContent = "👑";
+    resIcon.innerHTML = `<i data-lucide="crown" style="width: 72px; height: 72px; color: var(--warning-color);"></i>`;
     resHeading.textContent = "Flawless Victory!";
   } else if (accuracyPct >= 80) {
-    resIcon.textContent = "🏆";
+    resIcon.innerHTML = `<i data-lucide="trophy" style="width: 72px; height: 72px; color: var(--warning-color);"></i>`;
     resHeading.textContent = "Outstanding Performance!";
   } else if (accuracyPct >= 50) {
-    resIcon.textContent = "🎓";
+    resIcon.innerHTML = `<i data-lucide="graduation-cap" style="width: 72px; height: 72px; color: var(--accent-blue);"></i>`;
     resHeading.textContent = "Great Effort!";
   } else {
-    resIcon.textContent = "💪";
+    resIcon.innerHTML = `<i data-lucide="award" style="width: 72px; height: 72px; color: var(--text-muted);"></i>`;
     resHeading.textContent = "Keep Learning!";
   }
 
@@ -1113,7 +1115,7 @@ async function finishQuiz() {
       if (badgeObj) {
         const chip = document.createElement("div");
         chip.className = "badge-unlocked-chip";
-        chip.innerHTML = `<span>${badgeObj.icon}</span> <strong>${badgeObj.title}</strong>`;
+        chip.innerHTML = `<span><i data-lucide="${badgeObj.icon}" style="width: 16px; height: 16px; vertical-align: middle;"></i></span> <strong>${badgeObj.title}</strong>`;
         badgesList.appendChild(chip);
       }
     });
@@ -1509,17 +1511,24 @@ function setupHistoryHandlers() {
   });
 }
 
+let analyticsRequestSeq = 0;
+
 // --- ADMIN ANALYTICS DASHBOARD ---
 async function renderAnalyticsDashboard() {
+  const currentSeq = ++analyticsRequestSeq;
   const grid = document.getElementById("admin-stats-grid");
   const hardestList = document.getElementById("hardest-questions-list");
-  grid.innerHTML = "";
+  
+  grid.innerHTML = '<div style="color: var(--text-muted); padding: 20px; grid-column: span 4; text-align: center;">Loading analytics...</div>';
   hardestList.innerHTML = "";
 
   try {
     const res = await fetch('/api/analytics');
+    if (currentSeq !== analyticsRequestSeq) return;
+
     if (res.ok) {
       const data = await res.json();
+      if (currentSeq !== analyticsRequestSeq) return;
       
       const totalAttempts = data.stats.total_attempts || 0;
       const avgScore = data.stats.avg_accuracy || 0;
@@ -1527,24 +1536,28 @@ async function renderAnalyticsDashboard() {
       
       // Calculate total XP earned by all users
       const xpRes = await fetch('/api/leaderboard');
+      if (currentSeq !== analyticsRequestSeq) return;
+
       let totalXpEarned = 0;
       if (xpRes.ok) {
         const users = await xpRes.json();
+        if (currentSeq !== analyticsRequestSeq) return;
         totalXpEarned = users.reduce((sum, u) => sum + u.xp, 0);
       }
 
+      grid.innerHTML = "";
       const stats = [
-        { icon: "📊", val: totalAttempts, lbl: "Global Attempts" },
-        { icon: "🎯", val: `${avgScore}%`, lbl: "Global Accuracy" },
-        { icon: "✅", val: `${completionRate}%`, lbl: "Global Pass Rate" },
-        { icon: "⚡", val: totalXpEarned.toLocaleString(), lbl: "Total XP Earned" }
+        { icon: "bar-chart-3", val: totalAttempts, lbl: "Global Attempts", color: "var(--accent-blue)" },
+        { icon: "target", val: `${avgScore}%`, lbl: "Global Accuracy", color: "var(--error-color)" },
+        { icon: "check-circle", val: `${completionRate}%`, lbl: "Global Pass Rate", color: "var(--success-color)" },
+        { icon: "zap", val: totalXpEarned.toLocaleString(), lbl: "Total XP Earned", color: "var(--warning-color)" }
       ];
 
       stats.forEach(s => {
         const card = document.createElement("div");
         card.className = "admin-stat-card glass";
         card.innerHTML = `
-          <div class="admin-stat-icon">${s.icon}</div>
+          <div class="admin-stat-icon"><i data-lucide="${s.icon}" style="color: ${s.color}; width: 28px; height: 28px;"></i></div>
           <div class="admin-stat-val">${s.val}</div>
           <div class="admin-stat-lbl">${s.lbl}</div>
         `;
@@ -1553,6 +1566,7 @@ async function renderAnalyticsDashboard() {
 
       if (data.hardestQuestions.length === 0) {
         hardestList.innerHTML = '<p style="color: var(--text-muted); padding: 20px;">No global statistics recorded yet.</p>';
+        lucide.createIcons();
         return;
       }
 
@@ -1566,11 +1580,14 @@ async function renderAnalyticsDashboard() {
         `;
         hardestList.appendChild(row);
       });
+      lucide.createIcons();
       return;
     }
   } catch (err) {
     console.error("Error fetching database analytics", err);
   }
+
+  if (currentSeq !== analyticsRequestSeq) return;
 
   // Fallback to local user history calculations if database analytics API fails
   const history = state.attemptHistory;
@@ -1579,18 +1596,19 @@ async function renderAnalyticsDashboard() {
   const completionRate = totalAttempts > 0 ? Math.round((history.filter(a => a.passed).length / totalAttempts) * 100) : 0;
   const totalXpEarned = history.reduce((s, a) => s + a.score, 0);
 
+  grid.innerHTML = "";
   const stats = [
-    { icon: "📊", val: totalAttempts, lbl: "Total Attempts" },
-    { icon: "🎯", val: `${avgScore}%`, lbl: "Avg Accuracy" },
-    { icon: "✅", val: `${completionRate}%`, lbl: "Pass Rate" },
-    { icon: "⚡", val: totalXpEarned.toLocaleString(), lbl: "Total XP Earned" }
+    { icon: "bar-chart-3", val: totalAttempts, lbl: "Total Attempts", color: "var(--accent-blue)" },
+    { icon: "target", val: `${avgScore}%`, lbl: "Avg Accuracy", color: "var(--error-color)" },
+    { icon: "check-circle", val: `${completionRate}%`, lbl: "Pass Rate", color: "var(--success-color)" },
+    { icon: "zap", val: totalXpEarned.toLocaleString(), lbl: "Total XP Earned", color: "var(--warning-color)" }
   ];
 
   stats.forEach(s => {
     const card = document.createElement("div");
     card.className = "admin-stat-card glass";
     card.innerHTML = `
-      <div class="admin-stat-icon">${s.icon}</div>
+      <div class="admin-stat-icon"><i data-lucide="${s.icon}" style="color: ${s.color}; width: 28px; height: 28px;"></i></div>
       <div class="admin-stat-val">${s.val}</div>
       <div class="admin-stat-lbl">${s.lbl}</div>
     `;
@@ -1616,6 +1634,7 @@ async function renderAnalyticsDashboard() {
 
   if (sorted.length === 0) {
     hardestList.innerHTML = '<p style="color: var(--text-muted); padding: 20px;">Complete some quizzes to see analytics here.</p>';
+    lucide.createIcons();
     return;
   }
 
@@ -1629,6 +1648,7 @@ async function renderAnalyticsDashboard() {
     `;
     hardestList.appendChild(row);
   });
+  lucide.createIcons();
 }
 
 // --- ANTI-CHEAT: TAB SWITCH DETECTION ---
@@ -2368,7 +2388,7 @@ function showHostPodium() {
   if (listEl) {
     listEl.innerHTML = `
       <div style="text-align: center; padding: 24px; width: 100%;">
-        <h2 style="color: var(--warning-color); font-size: 26px; margin-bottom: 16px;">🏆 Live Quiz Podium 🏆</h2>
+        <h2 style="color: var(--warning-color); font-size: 26px; margin-bottom: 16px;"><i data-lucide="award" style="vertical-align: middle; margin-right: 8px; width: 26px; height: 26px; color: var(--warning-color);"></i>Live Quiz Podium</h2>
         <div style="display: flex; flex-direction: column; gap: 10px; max-width: 400px; margin: 0 auto;">
           ${state.multiplayer.participants.map((p, idx) => `
             <div class="leaderboard-row" style="padding: 12px 20px; background: rgba(255, 255, 255, 0.05); width: 100%; box-sizing: border-box;">
@@ -2380,6 +2400,8 @@ function showHostPodium() {
         </div>
       </div>
     `;
+    lucide.createIcons();
+  }
   }
   
   document.getElementById("host-game-next-btn").style.display = "none";
@@ -2508,11 +2530,12 @@ function showRoomPodium() {
   explanationPanel.style.display = "block";
   explanationText.innerHTML = `
     <div style="text-align: center; padding: 16px;">
-      <h3 style="color: var(--success-color); margin-bottom: 8px;">🎉 Live Quiz Finished! 🎉</h3>
+      <h3 style="color: var(--success-color); margin-bottom: 8px;"><i data-lucide="party-popper" style="vertical-align: middle; margin-right: 8px; width: 22px; height: 22px; color: var(--success-color);"></i>Live Quiz Finished!</h3>
       <p>The host has ended the session. Thank you for playing!</p>
       <button class="btn btn-secondary" onclick="leaveMultiplayerSession()" style="margin-top: 16px; width: auto; margin-left: auto; margin-right: auto;">Back to Dashboard</button>
     </div>
   `;
+  lucide.createIcons();
   
   // Disable option controls
   document.getElementById("arena-action-btn").style.display = "none";
