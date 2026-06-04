@@ -2,12 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" type="image/png" href="logo.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuizMania — Ultimate Interactive Trivia & Quiz Platform</title>
-  <meta name="description" content="Build your mind, test your skills, and earn badges on QuizMania. A premium, modern quiz creation and gameplay platform.">
+  <title>quizMaina — Quiz & Trivia Platform for Geeks</title>
+  <meta name="description" content="Build your mind, test your skills, and earn badges on quizMaina. A premium, modern quiz creation and gameplay platform.">
   <link rel="stylesheet" href="style.css">
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Inline theme initialization to prevent flash -->
+  <script>
+    (function() {
+      const theme = localStorage.getItem('theme') || 'light';
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark-theme');
+      } else {
+        document.documentElement.classList.remove('dark-theme');
+      }
+    })();
+  </script>
 </head>
 <body>
 
@@ -24,8 +36,8 @@
     <header>
       <nav class="navbar glass">
         <a href="#" class="logo" id="nav-logo">
-          <div class="logo-icon">Q</div>
-          <span class="logo-text text-gradient">QuizMania</span>
+          <img src="logo.png" alt="QuizMania Logo" class="logo-icon" style="background: none; padding: 0; box-shadow: none; object-fit: contain; width: 26px; height: 26px; margin-right: -2px;">
+          <span class="logo-text text-gradient">quizMaina</span>
         </a>
         
         <ul class="nav-links">
@@ -49,15 +61,23 @@
           </li>
         </ul>
 
-        <div class="user-profile-badge" style="gap: 8px;">
-          <div class="user-avatar" id="header-user-avatar">U</div>
-          <div style="display: flex; flex-direction: column;">
-            <div style="font-size: 12px; font-weight: 700; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" id="header-username">You</div>
-            <div style="font-size: 10px; color: var(--text-muted);"><span id="header-user-role-badge">Student</span> • Lvl <span id="header-user-level">1</span></div>
-          </div>
-          <button class="logout-btn" id="logout-btn" style="margin-left: 8px;" title="Logout">
-            <i data-lucide="log-out" size="14"></i>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <!-- Theme Toggle Button -->
+          <button class="theme-toggle-btn" id="theme-toggle-btn" title="Toggle Theme" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 8px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: var(--transition-fast);">
+            <i data-lucide="sun" id="theme-toggle-icon-sun" size="18" style="display: none;"></i>
+            <i data-lucide="moon" id="theme-toggle-icon-moon" size="18"></i>
           </button>
+
+          <div class="user-profile-badge" style="gap: 8px;">
+            <div class="user-avatar" id="header-user-avatar">U</div>
+            <div style="display: flex; flex-direction: column;">
+              <div style="font-size: 12px; font-weight: 700; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" id="header-username">You</div>
+              <div style="font-size: 10px; color: var(--text-muted);"><span id="header-user-role-badge">Student</span> • Lvl <span id="header-user-level">1</span></div>
+            </div>
+            <button class="logout-btn" id="logout-btn" style="margin-left: 8px;" title="Logout">
+              <i data-lucide="log-out" size="14"></i>
+            </button>
+          </div>
         </div>
       </nav>
     </header>
@@ -73,7 +93,7 @@
             <!-- Hero Card -->
             <div class="hero-card glass">
               <div class="hero-content">
-                <h1 class="hero-title">Expand Your <span class="text-gradient">Knowledge Horizon</span></h1>
+                <h1 class="hero-title">Expand Your <span class="text-gradient">Coding & Tech Knowledge</span></h1>
                 <p class="hero-subtitle">Test your intellect in web development, space science, history, and geography, or build your own custom trivia challenges!</p>
                 
                 <div class="hero-stats">
@@ -674,8 +694,8 @@
   <!-- LOGIN & SIGNUP OVERLAY -->
   <div class="login-overlay active" id="login-overlay">
     <div class="login-card glass">
-      <div class="login-logo">Q</div>
-      <h2 class="login-title text-gradient">Welcome to QuizMania</h2>
+      <img src="logo.png" alt="QuizMania Logo" class="login-logo" style="background: none; padding: 0; box-shadow: none; object-fit: contain; width: 120px; height: 120px; margin-bottom: 20px;">
+      <h2 class="login-title text-gradient">Welcome to quizMaina</h2>
       <p class="login-subtitle">Learn, build, and test your knowledge</p>
 
       <div class="login-tabs">

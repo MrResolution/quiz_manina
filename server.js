@@ -477,6 +477,7 @@ app.get('/api/leaderboard', async (req, res) => {
           0
         )) || '%' as accuracy
       FROM users u
+      WHERE u.role != 'teacher'
       ORDER BY u.xp DESC, name ASC
     `);
     

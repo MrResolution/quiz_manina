@@ -355,6 +355,36 @@ function setupNavigation() {
     switchView("badges-view");
   });
 
+  // Theme Toggle Button Event Listener
+  const themeToggleBtn = document.getElementById("theme-toggle-btn");
+  if (themeToggleBtn) {
+    const sunIcon = document.getElementById("theme-toggle-icon-sun");
+    const moonIcon = document.getElementById("theme-toggle-icon-moon");
+    
+    // Function to update the icons based on the active theme
+    const updateThemeIcons = (theme) => {
+      if (theme === "dark") {
+        if (sunIcon) sunIcon.style.display = "block";
+        if (moonIcon) moonIcon.style.display = "none";
+      } else {
+        if (sunIcon) sunIcon.style.display = "none";
+        if (moonIcon) moonIcon.style.display = "block";
+      }
+    };
+
+    // Initialize icons
+    const currentTheme = localStorage.getItem("theme") || "light";
+    updateThemeIcons(currentTheme);
+
+    themeToggleBtn.addEventListener("click", () => {
+      const isDark = document.documentElement.classList.toggle("dark-theme");
+      const newTheme = isDark ? "dark" : "light";
+      localStorage.setItem("theme", newTheme);
+      updateThemeIcons(newTheme);
+      showToast(`Switched to ${newTheme} mode!`, "info");
+    });
+  }
+
   // Handle Back/Forward browser buttons via hash change
   window.addEventListener("hashchange", () => {
     const hash = window.location.hash.replace("#", "");
@@ -1311,12 +1341,12 @@ function setupQuizCreatorHandlers() {
   const addQuestionBtn = document.getElementById("c-add-question-btn");
   const cancelBtn = document.getElementById("c-cancel-btn");
 
-  // Form Reset and init 1 default question
+  // Form Reset (no default questions)
   function resetCreator() {
     form.reset();
     creatorQuestions = [];
     document.getElementById("creator-questions-list").innerHTML = "";
-    addQuestionBlock();
+    document.getElementById("c-question-count-lbl").textContent = "0";
   }
 
   addQuestionBtn.addEventListener("click", () => {
