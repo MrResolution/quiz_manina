@@ -1127,7 +1127,8 @@ function validateAnswer(selectedIdx) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: state.user.username,
-        scoreGained: scoreGained
+        scoreGained: scoreGained,
+        currentQuestionIndex: qIdx
       })
     }).catch(err => console.error("Error submitting multiplayer score:", err));
   } else {
@@ -2140,24 +2141,19 @@ function setupLoginHandlers() {
       console.warn("Backend login failed, falling back to local accounts:", err);
       
       const accounts = getAccounts();
-      const user = accounts.find(a => a.username.toLowerCase() === usernameInput.toLowerCase());
-      if (user && user.password === passwordInput) {
+      const user = accounts.find(a => a.username.toLowerCase() === usernameInput.toLowerCase()) ||
+                   DEFAULT_ACCOUNTS.find(a => a.username.toLowerCase() === usernameInput.toLowerCase());
+      
+      if (!user) {
+        showToast("Account does not exist.", "error");
+      } else if (user.password !== passwordInput) {
+        showToast("Incorrect password.", "error");
+      } else {
         localStorage.setItem("quizmania_active_user", user.username);
         showToast(`Signed in successfully as ${user.username} (Offline Mode)!`, "success");
         await initApp();
         switchView("dashboard-view");
         loginForm.reset();
-      } else {
-        const defaultUser = DEFAULT_ACCOUNTS.find(a => a.username.toLowerCase() === usernameInput.toLowerCase());
-        if (defaultUser && defaultUser.password === passwordInput) {
-          localStorage.setItem("quizmania_active_user", defaultUser.username);
-          showToast(`Signed in successfully as ${defaultUser.username} (Offline Mode)!`, "success");
-          await initApp();
-          switchView("dashboard-view");
-          loginForm.reset();
-        } else {
-          showToast("Invalid username or password (offline).", "error");
-        }
       }
     }
   });
@@ -2430,9 +2426,13 @@ function startMultiplayerPolling() {
       state.multiplayer.currentQuestionIndex = statusData.currentQuestionIndex;
       
       if (state.multiplayer.role === 'host') {
-        updateHostLobbyUI();
-        if (state.multiplayer.status === 'active' && state.currentView === 'host-lobby-view') {
-          startHostGameplay();
+        if (state.currentView === 'host-lobby-view') {
+          updateHostLobbyUI();
+          if (state.multiplayer.status === 'active') {
+            startHostGameplay();
+          }
+        } else if (state.currentView === 'host-game-view') {
+          updateHostLiveScores();
         }
       } else {
         updateStudentLobbyUI();
@@ -2525,29 +2525,111 @@ function loadHostQuestion() {
   document.getElementById("host-game-q-num").textContent = qIdx + 1;
   document.getElementById("host-game-question-text").textContent = questionObj.question;
   
+  state.multiplayer.isAdvancing = false;
+  startHostQuestionTimer(quiz.timeLimit);
   updateHostLiveScores();
+}
+
+function startHostQuestionTimer(timeLimit) {
+  if (state.multiplayer.hostTimerInterval) {
+    clearInterval(state.multiplayer.hostTimerInterval);
+  }
+  
+  let timeLeft = timeLimit;
+  updateHostTimerUI(timeLeft, timeLimit);
+  
+  state.multiplayer.hostTimerInterval = setInterval(() => {
+    timeLeft--;
+    updateHostTimerUI(timeLeft, timeLimit);
+    
+    if (timeLeft <= 0) {
+      clearInterval(state.multiplayer.hostTimerInterval);
+      if (!state.multiplayer.isAdvancing) {
+        state.multiplayer.isAdvancing = true;
+        advanceHostGameQuestion();
+      }
+    }
+  }, 1000);
+}
+
+function updateHostTimerUI(curr, limit) {
+  const timerText = document.getElementById("host-game-timer-text");
+  const timerFill = document.getElementById("host-game-timer-fill");
+  
+  if (timerText) timerText.textContent = curr;
+  if (timerFill) {
+    const offset = 176 - (curr / limit) * 176;
+    timerFill.style.strokeDashoffset = offset;
+    
+    timerFill.classList.remove("warning", "danger");
+    if (curr <= 5) {
+      timerFill.classList.add("danger");
+    } else if (curr <= 10) {
+      timerFill.classList.add("warning");
+    }
+  }
 }
 
 function updateHostLiveScores() {
   const scoreListEl = document.getElementById("host-game-scores-list");
   if (scoreListEl) {
-    scoreListEl.innerHTML = state.multiplayer.participants.map((p, idx) => `
-      <div class="leaderboard-row" style="padding: 10px 16px;">
-        <span class="leaderboard-rank rank-${idx + 1}">${idx + 1}</span>
-        <div class="leaderboard-avatar">${p.username.slice(0, 2).toUpperCase()}</div>
-        <div class="leaderboard-name">${p.username}</div>
-        <span class="leaderboard-score" style="color: var(--accent-blue);">${p.score} pts</span>
-      </div>
-    `).join("");
+    scoreListEl.innerHTML = state.multiplayer.participants.map((p, idx) => {
+      const hasAnswered = p.last_answered_question_index === state.multiplayer.currentQuestionIndex;
+      const answeredIndicator = hasAnswered 
+        ? `<span style="font-size: 11px; background: var(--success-bg); color: var(--success-color); border: 1px solid var(--success-border); padding: 2px 6px; border-radius: 10px; font-weight: bold; margin-left: 8px;">Answered</span>`
+        : `<span style="font-size: 11px; background: var(--surface-border); color: var(--text-muted); padding: 2px 6px; border-radius: 10px; margin-left: 8px;">Thinking...</span>`;
+        
+      return `
+        <div class="leaderboard-row" style="padding: 10px 16px;">
+          <span class="leaderboard-rank rank-${idx + 1}">${idx + 1}</span>
+          <div class="leaderboard-avatar">${p.username.slice(0, 2).toUpperCase()}</div>
+          <div class="leaderboard-name" style="display: flex; align-items: center;">
+            ${p.username}
+            ${answeredIndicator}
+          </div>
+          <span class="leaderboard-score" style="color: var(--accent-blue);">${p.score} pts</span>
+        </div>
+      `;
+    }).join("");
   }
+  
+  const answeredCount = state.multiplayer.participants.filter(
+    p => p.last_answered_question_index === state.multiplayer.currentQuestionIndex
+  ).length;
+  
+  const totalParticipants = state.multiplayer.participants.length;
   
   const responsesCountEl = document.getElementById("host-game-responses-count");
   if (responsesCountEl) {
-    responsesCountEl.textContent = state.multiplayer.participants.length;
+    responsesCountEl.textContent = answeredCount;
+  }
+  
+  const totalParticipantsEl = document.getElementById("host-game-total-participants");
+  if (totalParticipantsEl) {
+    totalParticipantsEl.textContent = totalParticipants;
+  }
+  
+  const responsesBarEl = document.getElementById("host-game-responses-bar");
+  if (responsesBarEl) {
+    const pct = totalParticipants > 0 ? (answeredCount / totalParticipants) * 100 : 0;
+    responsesBarEl.style.width = `${pct}%`;
+  }
+  
+  if (totalParticipants > 0 && answeredCount === totalParticipants && !state.multiplayer.isAdvancing) {
+    state.multiplayer.isAdvancing = true;
+    if (state.multiplayer.hostTimerInterval) {
+      clearInterval(state.multiplayer.hostTimerInterval);
+    }
+    setTimeout(() => {
+      advanceHostGameQuestion();
+    }, 1000);
   }
 }
 
 async function advanceHostGameQuestion() {
+  if (state.multiplayer.hostTimerInterval) {
+    clearInterval(state.multiplayer.hostTimerInterval);
+  }
   const maxQ = state.multiplayer.quiz.questions.length;
   try {
     const res = await fetch(`/api/rooms/next-question/${state.multiplayer.pin}`, {
@@ -2574,6 +2656,9 @@ async function advanceHostGameQuestion() {
 }
 
 async function endHostedRoom() {
+  if (state.multiplayer.hostTimerInterval) {
+    clearInterval(state.multiplayer.hostTimerInterval);
+  }
   try {
     await fetch(`/api/rooms/end/${state.multiplayer.pin}`, { method: 'POST' });
     showHostPodium();
@@ -2584,6 +2669,9 @@ async function endHostedRoom() {
 
 function showHostPodium() {
   clearInterval(state.multiplayer.pollInterval);
+  if (state.multiplayer.hostTimerInterval) {
+    clearInterval(state.multiplayer.hostTimerInterval);
+  }
   
   const listEl = document.getElementById("host-game-scores-list");
   if (listEl) {
@@ -2707,12 +2795,16 @@ async function leaveStudentLobby() {
 
 function leaveMultiplayerSession() {
   clearInterval(state.multiplayer.pollInterval);
+  if (state.multiplayer.hostTimerInterval) {
+    clearInterval(state.multiplayer.hostTimerInterval);
+  }
   state.multiplayer = {
     active: false,
     role: null,
     pin: null,
     status: 'lobby',
     pollInterval: null,
+    hostTimerInterval: null,
     quiz: null,
     currentQuestionIndex: 0,
     participants: []

@@ -75,9 +75,12 @@ CREATE TABLE IF NOT EXISTS room_participants (
   room_pin VARCHAR(6) REFERENCES rooms(pin) ON DELETE CASCADE,
   username VARCHAR(50) NOT NULL,
   score INT DEFAULT 0,
+  last_answered_question_index INT DEFAULT -1,
   joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (room_pin, username)
 );
+
+ALTER TABLE room_participants ADD COLUMN IF NOT EXISTS last_answered_question_index INT DEFAULT -1;
 
 -- SEED USERS (password is 'password')
 INSERT INTO users (username, password, role, xp)

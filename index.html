@@ -609,12 +609,32 @@
               </div>
             </div>
 
-            <div class="host-status-panel glass" style="padding: 20px; border-radius: var(--radius-md); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 16px;">
+            <div class="host-status-panel glass" style="padding: 20px; border-radius: var(--radius-md); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 20px;">
               <div>
-                <h4 style="margin-bottom: 8px;">Live Room Status</h4>
-                <div style="font-size: 14px; color: var(--success-color); font-weight: bold;">Active Game</div>
+                <h4 style="margin-bottom: 4px;">Live Room Status</h4>
+                <div style="font-size: 14px; color: var(--success-color); font-weight: bold; margin-bottom: 12px;">Active Game</div>
               </div>
-              <button class="btn btn-primary" id="host-game-next-btn" style="width: auto;"><i data-lucide="arrow-right"></i> Next Question</button>
+              
+              <!-- Radial Timer for Host -->
+              <div class="timer-radial-container" style="width: 70px; height: 70px;">
+                <svg class="timer-svg" viewBox="0 0 60 60">
+                  <circle class="timer-circle-bg" cx="30" cy="30" r="28" />
+                  <circle class="timer-circle-val" id="host-game-timer-fill" cx="30" cy="30" r="28" style="stroke: var(--primary-color);" />
+                </svg>
+                <div class="timer-text" id="host-game-timer-text" style="font-size: 18px;">--</div>
+              </div>
+              
+              <!-- Responses Count -->
+              <div style="width: 100%;">
+                <div style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+                  Responses: <span id="host-game-responses-count">0</span> / <span id="host-game-total-participants">0</span>
+                </div>
+                <div class="progress-bar-bg" style="height: 6px;">
+                  <div class="progress-bar-fill" id="host-game-responses-bar" style="width: 0%; height: 100%; transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+              
+              <button class="btn btn-primary" id="host-game-next-btn" style="width: auto;"><i data-lucide="arrow-right"></i> Force Next</button>
             </div>
           </div>
 

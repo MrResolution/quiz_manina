@@ -86,13 +86,13 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
     if (result.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid username or password.' });
+      return res.status(400).json({ error: 'Account does not exist.' });
     }
     
     const user = result.rows[0];
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid username or password.' });
+      return res.status(400).json({ error: 'Incorrect password.' });
     }
     
     res.json({
@@ -592,7 +592,7 @@ app.get('/api/rooms/status/:pin', async (req, res) => {
     const room = roomResult.rows[0];
     
     const participantsResult = await pool.query(
-      'SELECT username, score FROM room_participants WHERE room_pin = $1 ORDER BY score DESC, username ASC',
+      'SELECT username, score, last_answered_question_index FROM room_participants WHERE room_pin = $1 ORDER BY score DESC, username ASC',
       [pin]
     );
     
@@ -649,11 +649,11 @@ app.post('/api/rooms/next-question/:pin', async (req, res) => {
 // Submit Participant Answer
 app.post('/api/rooms/submit-answer/:pin', async (req, res) => {
   const { pin } = req.params;
-  const { username, scoreGained } = req.body;
+  const { username, scoreGained, currentQuestionIndex } = req.body;
   try {
     await pool.query(
-      'UPDATE room_participants SET score = score + $1 WHERE room_pin = $2 AND username = $3',
-      [scoreGained || 0, pin, username]
+      'UPDATE room_participants SET score = score + $1, last_answered_question_index = $2 WHERE room_pin = $3 AND username = $4',
+      [scoreGained || 0, currentQuestionIndex !== undefined ? currentQuestionIndex : -1, pin, username]
     );
     res.json({ success: true });
   } catch (error) {
