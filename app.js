@@ -338,8 +338,21 @@ function setupNavigation() {
   navItems.forEach(item => {
     item.addEventListener("click", (e) => {
       e.preventDefault();
+      if (item.id === "nav-live-quiz") {
+        if (!state.multiplayer.active) return;
+        if (state.multiplayer.role === 'host') {
+          if (state.multiplayer.status === 'lobby') switchView("host-lobby-view");
+          else switchView("host-game-view");
+        } else {
+          if (state.multiplayer.status === 'lobby') switchView("student-lobby-view");
+          else if (state.multiplayer.status === 'active') switchView("arena-view");
+        }
+        return;
+      }
       const targetView = item.getAttribute("data-target");
-      switchView(targetView);
+      if (targetView) {
+        switchView(targetView);
+      }
     });
   });
 
@@ -429,23 +442,35 @@ function switchView(viewId) {
   }
 
   // Clear multiplayer polling if navigating away
-  if (state.multiplayer && state.multiplayer.active) {
-    if (viewId !== "host-lobby-view" && viewId !== "host-game-view" && viewId !== "student-lobby-view" && viewId !== "arena-view") {
-      clearInterval(state.multiplayer.pollInterval);
-      state.multiplayer.active = false;
-      state.multiplayer.pin = null;
-    }
-  }
+  // REMOVED: Do not clear multiplayer session when navigating away so users can return
+  // if (state.multiplayer && state.multiplayer.active) {
+  //   if (viewId !== "host-lobby-view" && viewId !== "host-game-view" && viewId !== "student-lobby-view" && viewId !== "arena-view") {
+  //     clearInterval(state.multiplayer.pollInterval);
+  //     state.multiplayer.active = false;
+  //     state.multiplayer.pin = null;
+  //   }
+  // }
 
   // Update navbar styling
   const navItems = document.querySelectorAll(".nav-item");
   navItems.forEach(item => {
+    if (item.id === "nav-live-quiz") return;
     if (item.getAttribute("data-target") === viewId) {
       item.classList.add("active");
     } else {
       item.classList.remove("active");
     }
   });
+  
+  // Manage Live Quiz button visibility
+  const navLiveQuiz = document.getElementById("nav-live-quiz");
+  if (navLiveQuiz) {
+    if (state.multiplayer && state.multiplayer.active) {
+      navLiveQuiz.style.display = "block";
+    } else {
+      navLiveQuiz.style.display = "none";
+    }
+  }
 
   // Switch visibility
   const views = document.querySelectorAll(".view");
@@ -2412,7 +2437,7 @@ function startMultiplayerPolling() {
     }
     
     try {
-      const res = await fetch(`/api/rooms/status/${state.multiplayer.pin}`);
+      const res = await fetch(`/api/rooms/status/${state.multiplayer.pin}?t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) {
         clearInterval(state.multiplayer.pollInterval);
         showToast("Live session was closed by the host.", "warning");
@@ -2809,6 +2834,8 @@ function leaveMultiplayerSession() {
     currentQuestionIndex: 0,
     participants: []
   };
+  const navLiveQuiz = document.getElementById("nav-live-quiz");
+  if (navLiveQuiz) navLiveQuiz.style.display = "none";
   switchView("dashboard-view");
 }
 
