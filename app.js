@@ -2572,11 +2572,16 @@ function startMultiplayerPolling() {
     clearInterval(state.multiplayer.pollInterval);
   }
   
+  state.multiplayer.isPolling = false;
+  
   state.multiplayer.pollInterval = setInterval(async () => {
     if (!state.multiplayer.pin) {
       clearInterval(state.multiplayer.pollInterval);
       return;
     }
+    
+    if (state.multiplayer.isPolling) return;
+    state.multiplayer.isPolling = true;
     
     try {
       const res = await fetch(`/api/rooms/status/${state.multiplayer.pin}?t=${Date.now()}`, { cache: 'no-store' });
@@ -2584,13 +2589,18 @@ function startMultiplayerPolling() {
         clearInterval(state.multiplayer.pollInterval);
         showToast("Live session was closed by the host.", "warning");
         leaveMultiplayerSession();
+        state.multiplayer.isPolling = false;
         return;
       }
       
       const statusData = await res.json();
       state.multiplayer.participants = statusData.participants;
       state.multiplayer.status = statusData.status;
-      state.multiplayer.currentQuestionIndex = statusData.currentQuestionIndex;
+      
+      // Ensure we don't go backwards in time due to stale caches or out-of-order requests
+      if (state.multiplayer.currentQuestionIndex === undefined || statusData.currentQuestionIndex >= state.multiplayer.currentQuestionIndex) {
+        state.multiplayer.currentQuestionIndex = statusData.currentQuestionIndex;
+      }
       
       if (state.multiplayer.role === 'host') {
         if (state.currentView === 'host-lobby-view') {
@@ -2618,6 +2628,8 @@ function startMultiplayerPolling() {
       }
     } catch (e) {
       console.error("Multiplayer polling error:", e);
+    } finally {
+      state.multiplayer.isPolling = false;
     }
   }, 2000);
 }
