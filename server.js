@@ -179,17 +179,17 @@ app.get('/api/quizzes', async (req, res) => {
     if (role === 'teacher') {
       // Teachers see all public quizzes + their own private quizzes
       quizzesResult = await pool.query(
-        'SELECT * FROM quizzes WHERE is_public = TRUE OR created_by = $1 ORDER BY created_at DESC',
+        'SELECT * FROM quizzes WHERE is_public = TRUE OR is_public IS NULL OR created_by = $1 ORDER BY created_at DESC',
         [username]
       );
     } else if (username) {
       // Students see all public quizzes + any they created
       quizzesResult = await pool.query(
-        'SELECT * FROM quizzes WHERE is_public = TRUE OR created_by = $1 ORDER BY created_at DESC',
+        'SELECT * FROM quizzes WHERE is_public = TRUE OR is_public IS NULL OR created_by = $1 ORDER BY created_at DESC',
         [username]
       );
     } else {
-      quizzesResult = await pool.query('SELECT * FROM quizzes WHERE is_public = TRUE ORDER BY created_at DESC');
+      quizzesResult = await pool.query('SELECT * FROM quizzes WHERE is_public = TRUE OR is_public IS NULL ORDER BY created_at DESC');
     }
     const quizzes = quizzesResult.rows;
     

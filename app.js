@@ -1305,6 +1305,19 @@ async function finishQuiz() {
     badgesContainer.style.display = "none";
   }
 
+  // Reset feedback form
+  const feedbackCollector = document.getElementById("feedback-collector");
+  if (feedbackCollector) {
+    document.getElementById("feedback-comments").value = "";
+    document.getElementById("feedback-thanks-msg").style.display = "none";
+    document.getElementById("submit-feedback-btn").style.display = "inline-flex";
+    feedbackCollector.dataset.rating = 0;
+    document.querySelectorAll(".feedback-star").forEach(s => {
+      s.style.color = "var(--text-muted)";
+      s.setAttribute("fill", "none");
+    });
+  }
+
   // Render Detailed Question Review
   renderQuestionReviewList();
 
@@ -1373,6 +1386,42 @@ function setupResultsHandlers() {
     if (state.gameplay.activeQuiz) {
       startQuiz(state.gameplay.activeQuiz.id);
     }
+  });
+
+  // Feedback Collector Handlers
+  const stars = document.querySelectorAll(".feedback-star");
+  stars.forEach(star => {
+    star.addEventListener("click", (e) => {
+      const rating = parseInt(e.currentTarget.getAttribute("data-rating"));
+      document.getElementById("feedback-collector").dataset.rating = rating;
+      stars.forEach(s => {
+        const sVal = parseInt(s.getAttribute("data-rating"));
+        if (sVal <= rating) {
+          s.style.color = "var(--warning-color)";
+          s.setAttribute("fill", "var(--warning-color)");
+        } else {
+          s.style.color = "var(--text-muted)";
+          s.setAttribute("fill", "none");
+        }
+      });
+    });
+  });
+
+  document.getElementById("submit-feedback-btn").addEventListener("click", async () => {
+    const rating = parseInt(document.getElementById("feedback-collector").dataset.rating) || 0;
+    const comments = document.getElementById("feedback-comments").value;
+    const quizId = state.gameplay.activeQuiz ? state.gameplay.activeQuiz.id : 'unknown';
+    
+    if (rating === 0) {
+      showToast("Please select a star rating first.", "warning");
+      return;
+    }
+    
+    // Simulate sending feedback to backend API
+    console.log("Feedback Submitted to backend:", { quizId, rating, comments });
+    
+    document.getElementById("submit-feedback-btn").style.display = "none";
+    document.getElementById("feedback-thanks-msg").style.display = "block";
   });
 }
 

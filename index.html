@@ -293,6 +293,21 @@
             </div>
           </div>
 
+          <!-- Feedback Collector -->
+          <div class="feedback-collector-section glass" id="feedback-collector" style="margin-bottom: 24px; padding: 24px; border-radius: var(--radius-lg); text-align: center;">
+            <h3 style="margin-bottom: 16px;"><i data-lucide="message-square-heart" style="color: var(--primary-color);"></i> How was this quiz?</h3>
+            <div class="feedback-stars" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 16px;" id="feedback-stars-container">
+              <i data-lucide="star" class="feedback-star" data-rating="1" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+              <i data-lucide="star" class="feedback-star" data-rating="2" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+              <i data-lucide="star" class="feedback-star" data-rating="3" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+              <i data-lucide="star" class="feedback-star" data-rating="4" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+              <i data-lucide="star" class="feedback-star" data-rating="5" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+            </div>
+            <textarea id="feedback-comments" class="creator-textarea" placeholder="Any additional comments? (Optional)" style="margin-bottom: 16px; min-height: 80px;"></textarea>
+            <button class="btn btn-primary" id="submit-feedback-btn" style="width: auto; margin: 0 auto;"><i data-lucide="send"></i> Submit Feedback</button>
+            <div id="feedback-thanks-msg" style="display: none; color: var(--success-color); font-weight: bold; margin-top: 12px;">Thanks for your feedback! <i data-lucide="check-circle" size="16" style="vertical-align: middle;"></i></div>
+          </div>
+
           <!-- Action Buttons -->
           <div class="result-footer-actions">
             <button class="btn btn-secondary" style="width: auto;" id="res-action-dashboard"><i data-lucide="home"></i> Home Dashboard</button>
