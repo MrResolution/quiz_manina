@@ -1412,40 +1412,68 @@ function setupResultsHandlers() {
     }
   });
 
-  // Feedback Collector Handlers
-  const stars = document.querySelectorAll(".feedback-star");
-  stars.forEach(star => {
-    star.addEventListener("click", (e) => {
-      const rating = parseInt(e.currentTarget.getAttribute("data-rating"));
-      document.getElementById("feedback-collector").dataset.rating = rating;
-      stars.forEach(s => {
-        const sVal = parseInt(s.getAttribute("data-rating"));
-        if (sVal <= rating) {
-          s.style.color = "var(--warning-color)";
-          s.setAttribute("fill", "var(--warning-color)");
-        } else {
-          s.style.color = "var(--text-muted)";
-          s.setAttribute("fill", "none");
-        }
-      });
-    });
-  });
-
-  document.getElementById("submit-feedback-btn").addEventListener("click", async () => {
-    const rating = parseInt(document.getElementById("feedback-collector").dataset.rating) || 0;
-    const comments = document.getElementById("feedback-comments").value;
-    const quizId = state.gameplay.activeQuiz ? state.gameplay.activeQuiz.id : 'unknown';
-    
-    if (rating === 0) {
-      showToast("Please select a star rating first.", "warning");
-      return;
+  // Feedback Collector Handlers - Global Event Delegation
+  document.body.addEventListener("click", async (e) => {
+    const star = e.target.closest(".feedback-star");
+    if (star) {
+      const rating = parseInt(star.getAttribute("data-rating"));
+      const collector = star.closest(".feedback-collector-section");
+      if (collector) {
+        collector.dataset.rating = rating;
+        const stars = collector.querySelectorAll(".feedback-star");
+        stars.forEach(s => {
+          const sVal = parseInt(s.getAttribute("data-rating"));
+          if (sVal <= rating) {
+            s.style.color = "var(--warning-color)";
+            s.setAttribute("fill", "var(--warning-color)");
+          } else {
+            s.style.color = "var(--text-muted)";
+            s.setAttribute("fill", "none");
+          }
+        });
+      }
     }
-    
-    // Simulate sending feedback to backend API
-    console.log("Feedback Submitted to backend:", { quizId, rating, comments });
-    
-    document.getElementById("submit-feedback-btn").style.display = "none";
-    document.getElementById("feedback-thanks-msg").style.display = "block";
+
+    if (e.target.closest("#submit-feedback-btn") || e.target.closest("#live-submit-feedback-btn")) {
+      const btn = e.target.closest("button");
+      const collector = btn.closest(".feedback-collector-section");
+      const isLive = btn.id === "live-submit-feedback-btn";
+      
+      const rating = parseInt(collector.dataset.rating) || 0;
+      const commentsInput = collector.querySelector("textarea");
+      const comments = commentsInput ? commentsInput.value : "";
+      
+      let quizId = 'unknown';
+      if (isLive && state.multiplayer && state.multiplayer.quiz) {
+        quizId = state.multiplayer.quiz.id;
+      } else if (state.gameplay && state.gameplay.activeQuiz) {
+        quizId = state.gameplay.activeQuiz.id;
+      }
+      
+      if (rating === 0) {
+        showToast("Please select a star rating first.", "warning");
+        return;
+      }
+      
+      try {
+        await fetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: state.user ? state.user.username : 'anonymous',
+            quizId: quizId,
+            rating: rating,
+            comments: comments
+          })
+        });
+      } catch (err) {
+        console.error("Error submitting feedback:", err);
+      }
+      
+      btn.style.display = "none";
+      const thanksMsg = collector.querySelector("div[id$='feedback-thanks-msg']");
+      if (thanksMsg) thanksMsg.style.display = "block";
+    }
   });
 }
 
@@ -3045,6 +3073,21 @@ function showRoomPodium() {
     <div style="text-align: center; padding: 16px;">
       <h3 style="color: var(--success-color); margin-bottom: 8px;"><i data-lucide="party-popper" style="vertical-align: middle; margin-right: 8px; width: 22px; height: 22px; color: var(--success-color);"></i>Live Quiz Finished!</h3>
       <p>The host has ended the session. Thank you for playing!</p>
+      
+      <div class="feedback-collector-section glass" id="live-feedback-collector" style="margin-top: 24px; margin-bottom: 24px; padding: 24px; border-radius: var(--radius-lg); text-align: center;" data-rating="0">
+        <h3 style="margin-bottom: 16px;"><i data-lucide="message-square-heart" style="color: var(--primary-color);"></i> How was this live quiz?</h3>
+        <div class="feedback-stars" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 16px;">
+          <i data-lucide="star" class="feedback-star live-feedback-star" data-rating="1" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+          <i data-lucide="star" class="feedback-star live-feedback-star" data-rating="2" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+          <i data-lucide="star" class="feedback-star live-feedback-star" data-rating="3" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+          <i data-lucide="star" class="feedback-star live-feedback-star" data-rating="4" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+          <i data-lucide="star" class="feedback-star live-feedback-star" data-rating="5" style="cursor: pointer; color: var(--text-muted); width: 28px; height: 28px;"></i>
+        </div>
+        <textarea id="live-feedback-comments" class="creator-textarea" placeholder="Any additional comments? (Optional)" style="margin-bottom: 16px; min-height: 80px;"></textarea>
+        <button class="btn btn-primary" id="live-submit-feedback-btn" style="width: auto; margin: 0 auto;"><i data-lucide="send"></i> Submit Feedback</button>
+        <div id="live-feedback-thanks-msg" style="display: none; color: var(--success-color); font-weight: bold; margin-top: 12px;">Thanks for your feedback! <i data-lucide="check-circle" size="16" style="vertical-align: middle;"></i></div>
+      </div>
+
       <button class="btn btn-secondary" onclick="leaveMultiplayerSession()" style="margin-top: 16px; width: auto; margin-left: auto; margin-right: auto;">Back to Dashboard</button>
     </div>
   `;

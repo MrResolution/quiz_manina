@@ -677,6 +677,30 @@ app.post('/api/rooms/end/:pin', async (req, res) => {
 });
 
 // ==========================================
+// FEEDBACK ENDPOINT
+// ==========================================
+
+// Submit Feedback
+app.post('/api/feedback', async (req, res) => {
+  const { username, quizId, rating, comments } = req.body;
+  
+  if (!rating) {
+    return res.status(400).json({ error: 'Rating is required.' });
+  }
+  
+  try {
+    await pool.query(
+      'INSERT INTO feedback (username, quiz_id, rating, comments) VALUES ($1, $2, $3, $4)',
+      [username, quizId === 'unknown' ? null : quizId, rating, comments]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
+    res.status(500).json({ error: 'Server error submitting feedback.' });
+  }
+});
+
+// ==========================================
 // FRONTEND ROUTING FALLBACK
 // ==========================================
 app.get('*', (req, res) => {

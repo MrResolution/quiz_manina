@@ -84,6 +84,15 @@ CREATE TABLE IF NOT EXISTS room_participants (
 
 ALTER TABLE room_participants ADD COLUMN IF NOT EXISTS last_answered_question_index INT DEFAULT -1;
 
+CREATE TABLE IF NOT EXISTS feedback (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(50) REFERENCES users(username) ON DELETE SET NULL,
+  quiz_id VARCHAR(100) REFERENCES quizzes(id) ON DELETE SET NULL,
+  rating INT NOT NULL,
+  comments TEXT,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- SEED USERS (password is 'password')
 INSERT INTO users (username, password, role, xp)
 VALUES 
