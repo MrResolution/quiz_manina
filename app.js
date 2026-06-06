@@ -1474,6 +1474,7 @@ function setupQuizCreatorHandlers() {
     const uniqueId = `quiz-custom-${Date.now()}`;
     const passingScore = parseInt(document.getElementById("c-passing-score").value) || 50;
     const maxAttempts = parseInt(document.getElementById("c-max-attempts").value) || 0;
+    const maxQuestionsPerSession = parseInt(document.getElementById("c-max-questions-session").value) || 0;
     const shuffleQuestions = document.getElementById("c-shuffle-questions").checked;
     const shuffleAnswers = document.getElementById("c-shuffle-answers").checked;
     const isPublic = document.getElementById("c-is-public") ? document.getElementById("c-is-public").checked : true;
