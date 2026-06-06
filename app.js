@@ -2124,14 +2124,38 @@ function importCSV(file) {
     const questions = [];
     // Expected format: question,optionA,optionB,optionC,optionD,correctIndex,explanation
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, ''));
-      if (cols.length < 6) continue;
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const cols = [];
+      let current = "";
+      let inQuotes = false;
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"') {
+          if (inQuotes && line[j + 1] === '"') {
+            current += '"';
+            j++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          cols.push(current);
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      cols.push(current);
+      
+      const cleanCols = cols.map(c => c.trim().replace(/^"|"$/g, ''));
+      if (cleanCols.length < 6) continue;
 
       questions.push({
-        question: cols[0],
-        options: [cols[1], cols[2], cols[3], cols[4]],
-        answer: parseInt(cols[5]) || 0,
-        explanation: cols[6] || ""
+        question: cleanCols[0],
+        options: [cleanCols[1], cleanCols[2], cleanCols[3], cleanCols[4]],
+        answer: parseInt(cleanCols[5]) || 0,
+        explanation: cleanCols[6] || ""
       });
     }
 
@@ -2145,11 +2169,21 @@ function importCSV(file) {
       const lastBlock = blocks[blocks.length - 1];
       
       lastBlock.querySelector(".q-text-input").value = q.question;
+      
+      const validOpts = q.options.filter(opt => opt !== "");
+      if (validOpts.length === 2) {
+        const select = lastBlock.querySelector(".opt-count-select");
+        if (select) {
+          select.value = "2";
+          updateOptionsCount(select);
+        }
+      }
+      
       const opts = lastBlock.querySelectorAll(".opt-text-input");
-      q.options.forEach((opt, i) => { if (opts[i]) opts[i].value = opt; });
+      validOpts.forEach((opt, i) => { if (opts[i]) opts[i].value = opt; });
       
       const radios = lastBlock.querySelectorAll(".opt-radio-input");
-      radios.forEach((r, i) => r.checked = (i === q.answer));
+      if (radios[q.answer]) radios[q.answer].checked = true;
       
       const expInput = lastBlock.querySelector(".q-explanation-input");
       if (expInput) expInput.value = q.explanation;
@@ -2167,12 +2201,12 @@ function exportCSV() {
   let csv = "question,optionA,optionB,optionC,optionD,correctIndex,explanation\n";
   
   blocks.forEach(block => {
-    const qText = block.querySelector(".q-text-input").value.trim();
-    const opts = [...block.querySelectorAll(".opt-text-input")].map(i => i.value.trim());
+    const qText = block.querySelector(".q-text-input").value.trim().replace(/"/g, '""');
+    const opts = [...block.querySelectorAll(".opt-text-input")].map(i => i.value.trim().replace(/"/g, '""'));
     const radios = block.querySelectorAll(".opt-radio-input");
     let correctIdx = 0;
     radios.forEach((r, i) => { if (r.checked) correctIdx = i; });
-    const explanation = block.querySelector(".q-explanation-input").value.trim();
+    const explanation = block.querySelector(".q-explanation-input").value.trim().replace(/"/g, '""');
     
     csv += `"${qText}","${opts[0] || ''}","${opts[1] || ''}","${opts[2] || ''}","${opts[3] || ''}",${correctIdx},"${explanation}"\n`;
   });
