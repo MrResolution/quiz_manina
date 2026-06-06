@@ -1,3 +1,20 @@
+
+// Override fetch to add JWT Authorization header
+const originalFetch = window.fetch;
+window.fetch = async function() {
+  let [resource, config] = arguments;
+  if (typeof resource === 'string' && resource.startsWith('/api/') && !resource.startsWith('/api/auth/')) {
+    config = config || {};
+    config.headers = config.headers || {};
+    const token = localStorage.getItem('quizmania_token');
+    if (token) {
+      config.headers['Authorization'] = 'Bearer ' + token;
+    }
+    arguments[1] = config;
+  }
+  return originalFetch.apply(this, arguments);
+};
+
 // --- DEFAULT PRE-POPULATED QUIZZES ---
 const DEFAULT_QUIZZES = [];
 
@@ -185,6 +202,15 @@ async function loadUserProfile() {
     const res = await fetch(`/api/users/${activeUser}`);
     if (res.ok) {
       state.user = await res.json();
+    } else if (res.status === 404) {
+      // User no longer exists in the database
+      localStorage.removeItem("quizmania_active_user");
+      localStorage.removeItem("quizmania_token");
+      document.getElementById("login-overlay").classList.add("active");
+      if (typeof showToast === 'function') {
+        showToast("Account no longer exists. Please log in again.", "error");
+      }
+      return;
     } else {
       state.user = {
         xp: 0,
@@ -2347,6 +2373,7 @@ function setupLoginHandlers() {
       if (res.ok) {
         const data = await res.json();
         localStorage.setItem("quizmania_active_user", data.username);
+        localStorage.setItem("quizmania_token", data.token);
         showToast(`Signed in successfully as ${data.username}!`, "success");
         await initApp();
         switchView("dashboard-view");
@@ -2407,6 +2434,7 @@ function setupLoginHandlers() {
       if (res.ok) {
         const data = await res.json();
         localStorage.setItem("quizmania_active_user", data.username);
+        localStorage.setItem("quizmania_token", data.token);
         showToast("Account created successfully!", "success");
         await initApp();
         switchView("dashboard-view");

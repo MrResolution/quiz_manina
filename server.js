@@ -2,7 +2,22 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const path = require('path');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-quizmania-key';
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.sendStatus(401);
+  
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+}
 
 const fs = require('fs');
 
@@ -73,7 +88,8 @@ app.post('/api/auth/register', async (req, res) => {
       [username, hashedPassword, role || 'student']
     );
     
-    res.status(201).json(result.rows[0]);
+    const token = jwt.sign({ username, role: role || 'student' }, JWT_SECRET, { expiresIn: '24h' });
+    res.status(201).json({ ...result.rows[0], token });
   } catch (error) {
     console.error('Error during registration:', error);
     res.status(500).json({ error: 'Server error during registration.' });
@@ -103,7 +119,8 @@ app.post('/api/auth/login', async (req, res) => {
       id: user.id,
       username: user.username,
       role: user.role,
-      xp: user.xp
+      xp: user.xp,
+      token: jwt.sign({ username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '24h' })
     });
   } catch (error) {
     console.error('Error during login:', error);
@@ -153,7 +170,8 @@ app.get('/api/users/:username', async (req, res) => {
 });
 
 // Update XP
-app.post('/api/users/:username/update-xp', async (req, res) => {
+app.post('/api/users/:username/update-xp', authenticateToken, async (req, res) => {
+  if (req.user.username.toLowerCase() !== req.params.username.toLowerCase()) return res.status(403).json({ error: 'Unauthorized.' });
   const { username } = req.params;
   const { xp } = req.body;
   try {
@@ -273,7 +291,8 @@ app.get('/api/quizzes/:id', async (req, res) => {
 });
 
 // Create Custom Quiz
-app.post('/api/quizzes/create', async (req, res) => {
+app.post('/api/quizzes/create', authenticateToken, async (req, res) => {
+  req.body.createdBy = req.user.username;
   const { id, title, description, category, difficulty, timeLimit, passingScore, maxAttempts, maxQuestionsPerSession, shuffleQuestions, shuffleAnswers, createdBy, questions, isPublic } = req.body;
   
   if (!id || !title || !questions || !Array.isArray(questions)) {
@@ -312,9 +331,9 @@ app.post('/api/quizzes/create', async (req, res) => {
 });
 
 // Delete Quiz
-app.delete('/api/quizzes/:id', async (req, res) => {
+app.delete('/api/quizzes/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const username = req.body.username || req.query.username;
+  const username = req.user.username;
   
   try {
     const quizCheck = await pool.query('SELECT created_by FROM quizzes WHERE id = $1', [id]);
@@ -324,16 +343,11 @@ app.delete('/api/quizzes/:id', async (req, res) => {
     
     const quiz = quizCheck.rows[0];
     
-    if (username) {
-      const userCheck = await pool.query('SELECT role FROM users WHERE username = $1', [username]);
-      const user = userCheck.rows[0];
-      
-      const isCreator = quiz.created_by && quiz.created_by.toLowerCase() === username.toLowerCase();
-      const isTeacher = user && user.role === 'teacher';
-      
-      if (!isCreator && !isTeacher) {
-        return res.status(403).json({ error: 'You do not have permission to delete this quiz.' });
-      }
+    const isCreator = quiz.created_by && quiz.created_by.toLowerCase() === username.toLowerCase();
+    const isTeacher = req.user.role === 'teacher';
+    
+    if (!isCreator && !isTeacher) {
+      return res.status(403).json({ error: 'You do not have permission to delete this quiz.' });
     }
     
     await pool.query('DELETE FROM quizzes WHERE id = $1', [id]);
@@ -349,8 +363,9 @@ app.delete('/api/quizzes/:id', async (req, res) => {
 // ==========================================
 
 // Log Quiz Attempt
-app.post('/api/attempts/log', async (req, res) => {
-  const { username, quizId, score, correctCount, totalQuestions, accuracyPct, passed, maxStreak, timeTaken, answersLog } = req.body;
+app.post('/api/attempts/log', authenticateToken, async (req, res) => {
+  const { quizId, score, correctCount, totalQuestions, accuracyPct, passed, maxStreak, timeTaken, answersLog } = req.body;
+  const username = req.user.username;
   
   if (!username || !quizId) {
     return res.status(400).json({ error: 'Username and Quiz ID are required.' });
@@ -527,8 +542,9 @@ app.get('/api/leaderboard', async (req, res) => {
 // ==========================================
 
 // Host a Room
-app.post('/api/rooms/host', async (req, res) => {
-  const { quizId, hostUsername } = req.body;
+app.post('/api/rooms/host', authenticateToken, async (req, res) => {
+  const { quizId } = req.body;
+  const hostUsername = req.user.username;
   if (!quizId || !hostUsername) {
     return res.status(400).json({ error: 'Quiz ID and Host Username are required.' });
   }
@@ -557,8 +573,9 @@ app.post('/api/rooms/host', async (req, res) => {
 });
 
 // Join a Room
-app.post('/api/rooms/join', async (req, res) => {
-  const { pin, username } = req.body;
+app.post('/api/rooms/join', authenticateToken, async (req, res) => {
+  const { pin } = req.body;
+  const username = req.user.username;
   if (!pin || !username) {
     return res.status(400).json({ error: 'PIN and Username are required.' });
   }
@@ -617,9 +634,11 @@ app.get('/api/rooms/status/:pin', async (req, res) => {
 });
 
 // Start Room Quiz
-app.post('/api/rooms/start/:pin', async (req, res) => {
+app.post('/api/rooms/start/:pin', authenticateToken, async (req, res) => {
   const { pin } = req.params;
   try {
+    const r = await pool.query('SELECT host_username FROM rooms WHERE pin = $1', [pin]);
+    if (r.rows.length === 0 || r.rows[0].host_username !== req.user.username) return res.status(403).json({error: 'Unauthorized'});
     await pool.query('UPDATE rooms SET status = $1, current_question_index = 0 WHERE pin = $2', ['active', pin]);
     res.json({ success: true });
   } catch (error) {
@@ -629,11 +648,12 @@ app.post('/api/rooms/start/:pin', async (req, res) => {
 });
 
 // Advance Question
-app.post('/api/rooms/next-question/:pin', async (req, res) => {
+app.post('/api/rooms/next-question/:pin', authenticateToken, async (req, res) => {
   const { pin } = req.params;
   const { maxQuestions } = req.body;
   try {
-    const roomResult = await pool.query('SELECT current_question_index FROM rooms WHERE pin = $1', [pin]);
+    const roomResult = await pool.query('SELECT current_question_index, host_username FROM rooms WHERE pin = $1', [pin]);
+    if (roomResult.rows[0].host_username !== req.user.username) return res.status(403).json({error: 'Unauthorized'});
     if (roomResult.rows.length === 0) {
       return res.status(404).json({ error: 'Room not found.' });
     }
@@ -653,9 +673,10 @@ app.post('/api/rooms/next-question/:pin', async (req, res) => {
 });
 
 // Submit Participant Answer
-app.post('/api/rooms/submit-answer/:pin', async (req, res) => {
+app.post('/api/rooms/submit-answer/:pin', authenticateToken, async (req, res) => {
   const { pin } = req.params;
-  const { username, scoreGained, currentQuestionIndex } = req.body;
+  const { scoreGained, currentQuestionIndex } = req.body;
+  const username = req.user.username;
   try {
     await pool.query(
       'UPDATE room_participants SET score = score + $1, last_answered_question_index = $2 WHERE room_pin = $3 AND username = $4',
@@ -669,9 +690,11 @@ app.post('/api/rooms/submit-answer/:pin', async (req, res) => {
 });
 
 // End Room Quiz
-app.post('/api/rooms/end/:pin', async (req, res) => {
+app.post('/api/rooms/end/:pin', authenticateToken, async (req, res) => {
   const { pin } = req.params;
   try {
+    const r = await pool.query('SELECT host_username FROM rooms WHERE pin = $1', [pin]);
+    if (r.rows.length === 0 || r.rows[0].host_username !== req.user.username) return res.status(403).json({error: 'Unauthorized'});
     await pool.query('UPDATE rooms SET status = $1 WHERE pin = $2', ['finished', pin]);
     res.json({ success: true });
   } catch (error) {
@@ -685,8 +708,9 @@ app.post('/api/rooms/end/:pin', async (req, res) => {
 // ==========================================
 
 // Submit Feedback
-app.post('/api/feedback', async (req, res) => {
-  const { username, quizId, rating, comments } = req.body;
+app.post('/api/feedback', authenticateToken, async (req, res) => {
+  const { quizId, rating, comments } = req.body;
+  const username = req.user.username;
   
   if (!rating) {
     return res.status(400).json({ error: 'Rating is required.' });
