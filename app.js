@@ -1093,6 +1093,8 @@ function validateAnswer(selectedIdx) {
     question: questionObj.question,
     selected: selectedIdx,
     correct: correctIdx,
+    correctText: questionObj.correctText,
+    type: qType,
     isCorrect: isCorrect,
     explanation: questionObj.explanation,
     options: questionObj.options
@@ -1338,27 +1340,43 @@ function renderQuestionReviewList() {
     item.className = "review-item glass";
     item.style.borderLeft = log.isCorrect ? "4px solid var(--success-color)" : "4px solid var(--error-color)";
 
-    const reviewOptionsHTML = log.options.map((optText, optIdx) => {
-      let optClass = "";
-      let optIcon = "";
-
-      if (optIdx === log.correct) {
-        optClass = "correct";
-        optIcon = `<i data-lucide="check" class="review-icon" style="color: var(--success-color);"></i>`;
-      } else if (optIdx === log.selected && !log.isCorrect) {
-        optClass = "incorrect";
-        optIcon = `<i data-lucide="x" class="review-icon" style="color: var(--error-color);"></i>`;
-      } else {
-        optIcon = `<div style="width: 16px; margin-right: 10px;"></div>`;
-      }
-
-      return `
-        <div class="review-option ${optClass}">
-          ${optIcon}
-          <span>${optText}</span>
+    let reviewOptionsHTML = "";
+    if (log.type === "short_answer") {
+      reviewOptionsHTML = `
+        <div class="review-option ${log.isCorrect ? 'correct' : 'incorrect'}">
+          ${log.isCorrect ? '<i data-lucide="check" class="review-icon" style="color: var(--success-color);"></i>' : '<i data-lucide="x" class="review-icon" style="color: var(--error-color);"></i>'}
+          <span>Your answer: ${log.selected || '(No answer)'}</span>
         </div>
+        ${!log.isCorrect ? `
+          <div class="review-option correct">
+            <i data-lucide="check" class="review-icon" style="color: var(--success-color);"></i>
+            <span>Correct answer: ${log.correctText || ''}</span>
+          </div>
+        ` : ''}
       `;
-    }).join("");
+    } else if (log.options) {
+      reviewOptionsHTML = log.options.map((optText, optIdx) => {
+        let optClass = "";
+        let optIcon = "";
+
+        if (optIdx === log.correct) {
+          optClass = "correct";
+          optIcon = `<i data-lucide="check" class="review-icon" style="color: var(--success-color);"></i>`;
+        } else if (optIdx === log.selected && !log.isCorrect) {
+          optClass = "incorrect";
+          optIcon = `<i data-lucide="x" class="review-icon" style="color: var(--error-color);"></i>`;
+        } else {
+          optIcon = `<div style="width: 16px; margin-right: 10px;"></div>`;
+        }
+
+        return `
+          <div class="review-option ${optClass}">
+            ${optIcon}
+            <span>${optText}</span>
+          </div>
+        `;
+      }).join("");
+    }
 
     item.innerHTML = `
       <div class="review-header">
