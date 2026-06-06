@@ -1519,8 +1519,19 @@ function addQuestionBlock() {
       <input class="creator-input q-text-input" type="text" placeholder="e.g. Which language runs in a web browser?" required>
     </div>
 
-    <label class="creator-label">Options & Correct Answer</label>
-    <p class="options-help-text">Type in the possible options and select the circular radio button next to the correct answer.</p>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px;">
+      <div>
+        <label class="creator-label">Options & Correct Answer</label>
+        <p class="options-help-text" style="margin: 0;">Type in the possible options and select the circular radio button next to the correct answer.</p>
+      </div>
+      <div style="margin-left: 16px;">
+        <label class="creator-label" style="font-size: 12px;">Number of Options</label>
+        <select class="creator-select opt-count-select" style="padding: 4px; font-size: 13px;" onchange="updateOptionsCount(this)">
+          <option value="2">2 Options</option>
+          <option value="4" selected>4 Options</option>
+        </select>
+      </div>
+    </div>
 
     <div class="options-builder-grid">
       <div class="option-input-wrapper">
@@ -1613,6 +1624,52 @@ function removeQuestionBlock(qNum) {
     lucide.createIcons();
   }
 }
+
+window.updateOptionsCount = function(selectElem) {
+  const block = selectElem.closest('.question-builder-item');
+  if (!block) return;
+  const qNumMatch = block.id.match(/q-block-(\d+)/);
+  if (!qNumMatch) return;
+  const qNum = qNumMatch[1];
+  const count = parseInt(selectElem.value, 10);
+
+  const grid = block.querySelector(".options-builder-grid");
+  if (!grid) return;
+  
+  const currentInputs = grid.querySelectorAll(".opt-text-input");
+  const currentVals = Array.from(currentInputs).map(inp => inp.value);
+  let checkedIdx = 0;
+  const currentRadios = grid.querySelectorAll(".opt-radio-input");
+  currentRadios.forEach((radio, idx) => {
+    if (radio.checked) checkedIdx = idx;
+  });
+
+  if (checkedIdx >= count) checkedIdx = 0;
+
+  grid.innerHTML = "";
+  for (let i = 0; i < count; i++) {
+    const letter = String.fromCharCode(65 + i);
+    const wrapper = document.createElement("div");
+    wrapper.className = "option-input-wrapper";
+    if (i === checkedIdx) wrapper.classList.add("correct-answer-selected");
+    
+    wrapper.innerHTML = `
+      <input type="radio" name="correct-radio-q${qNum}" class="option-radio opt-radio-input" required ${i === checkedIdx ? 'checked' : ''}>
+      <input class="option-builder-text opt-text-input" type="text" placeholder="Option ${letter}" required value="${currentVals[i] || ''}">
+    `;
+    grid.appendChild(wrapper);
+  }
+
+  // Re-attach event listeners
+  const radios = grid.querySelectorAll(".opt-radio-input");
+  const wrappers = grid.querySelectorAll(".option-input-wrapper");
+  radios.forEach((radio, idx) => {
+    radio.addEventListener("change", () => {
+      wrappers.forEach(w => w.classList.remove("correct-answer-selected"));
+      wrappers[idx].classList.add("correct-answer-selected");
+    });
+  });
+};
 
 // =========================================
 // NEW FEATURES
