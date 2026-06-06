@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS answers_log (
   id SERIAL PRIMARY KEY,
   attempt_id INT REFERENCES attempts(id) ON DELETE CASCADE,
   question TEXT NOT NULL,
-  selected VARCHAR(255),
-  correct VARCHAR(255),
+  selected TEXT,
+  correct TEXT,
   is_correct BOOLEAN DEFAULT FALSE,
   explanation TEXT
 );
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS answers_log (
 CREATE TABLE IF NOT EXISTS rooms (
   pin VARCHAR(6) PRIMARY KEY,
   quiz_id VARCHAR(100) REFERENCES quizzes(id) ON DELETE CASCADE,
-  host_username VARCHAR(50) NOT NULL,
+  host_username VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
   status VARCHAR(20) DEFAULT 'lobby',
   current_question_index INT DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 
 CREATE TABLE IF NOT EXISTS room_participants (
   room_pin VARCHAR(6) REFERENCES rooms(pin) ON DELETE CASCADE,
-  username VARCHAR(50) NOT NULL,
+  username VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
   score INT DEFAULT 0,
   last_answered_question_index INT DEFAULT -1,
   joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS room_participants (
 );
 
 ALTER TABLE room_participants ADD COLUMN IF NOT EXISTS last_answered_question_index INT DEFAULT -1;
+ALTER TABLE answers_log ALTER COLUMN selected TYPE TEXT;
+ALTER TABLE answers_log ALTER COLUMN correct TYPE TEXT;
 
 CREATE TABLE IF NOT EXISTS feedback (
   id SERIAL PRIMARY KEY,
