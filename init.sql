@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS quizzes (
   max_attempts INT DEFAULT 0,
   shuffle_questions BOOLEAN DEFAULT TRUE,
   shuffle_answers BOOLEAN DEFAULT TRUE,
+  max_questions_per_session INT DEFAULT 0,
   created_by VARCHAR(50) REFERENCES users(username) ON DELETE SET NULL,
   is_public BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

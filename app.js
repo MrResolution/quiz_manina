@@ -810,6 +810,11 @@ function startQuiz(quizId) {
     questions = shuffleArray(questions);
   }
 
+  // Limit questions if maxQuestionsPerSession is configured
+  if (quiz.maxQuestionsPerSession > 0 && questions.length > quiz.maxQuestionsPerSession) {
+    questions = questions.slice(0, quiz.maxQuestionsPerSession);
+  }
+
   // Shuffle answer options if configured
   if (quiz.shuffleAnswers !== false) {
     questions.forEach(q => {
@@ -1482,6 +1487,7 @@ function setupQuizCreatorHandlers() {
       timeLimit: timeLimit,
       passingScore: passingScore,
       maxAttempts: maxAttempts,
+      maxQuestionsPerSession: maxQuestionsPerSession,
       shuffleQuestions: shuffleQuestions,
       shuffleAnswers: shuffleAnswers,
       isPublic: isPublic,
@@ -2417,16 +2423,21 @@ async function hostQuiz(quizId) {
     }
     
     const { pin } = await res.json();
-    
-    state.multiplayer = {
-      active: true,
-      role: 'host',
-      pin: pin,
-      status: 'lobby',
-      quiz: state.quizzes.find(q => q.id === quizId),
-      currentQuestionIndex: 0,
-      participants: []
-    };
+    const quizObj = state.quizzes.find(q => q.id === quizId);
+    if (!quizObj) { showToast("Quiz not found.", "error"); return; }
+    let mqQuiz = JSON.parse(JSON.stringify(quizObj));
+    if (mqQuiz && mqQuiz.maxQuestionsPerSession > 0 && mqQuiz.questions.length > mqQuiz.maxQuestionsPerSession) {
+        mqQuiz.questions = mqQuiz.questions.slice(0, mqQuiz.maxQuestionsPerSession);
+      }
+
+      state.multiplayer = {
+        active: true,
+        role: 'host',
+        pin: pin,
+        status: 'lobby',
+        quiz: mqQuiz,
+        participants: []
+      };
     
     document.getElementById("host-pin-code").textContent = pin;
     document.getElementById("host-player-count").textContent = "0";
@@ -2458,16 +2469,22 @@ async function joinQuizRoom(pin) {
     }
     
     const { quizId } = await res.json();
-    
-    state.multiplayer = {
-      active: true,
-      role: 'student',
-      pin: pin,
-      status: 'lobby',
-      quiz: state.quizzes.find(q => q.id === quizId),
-      currentQuestionIndex: 0,
-      participants: []
-    };
+    const quizRes = await fetch(`/api/quizzes/${quizId}?username=${encodeURIComponent(state.user.username)}`);
+    if (!quizRes.ok) { showToast("Quiz not found.", "error"); return; }
+    let mqQuiz = await quizRes.json();
+    if (mqQuiz && mqQuiz.maxQuestionsPerSession > 0 && mqQuiz.questions.length > mqQuiz.maxQuestionsPerSession) {
+      mqQuiz.questions = mqQuiz.questions.slice(0, mqQuiz.maxQuestionsPerSession);
+    }
+
+      state.multiplayer = {
+        active: true,
+        role: 'student',
+        pin: pin,
+        status: 'lobby',
+        quiz: mqQuiz,
+        currentQuestionIndex: 0,
+        participants: []
+      };
     
     document.getElementById("student-lobby-quiz-title").textContent = state.multiplayer.quiz ? state.multiplayer.quiz.title : "Live Quiz";
     document.getElementById("student-lobby-pin").textContent = pin;

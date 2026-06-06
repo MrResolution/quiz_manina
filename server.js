@@ -205,6 +205,7 @@ app.get('/api/quizzes', async (req, res) => {
         timeLimit: q.time_limit,
         passingScore: q.passing_score,
         maxAttempts: q.max_attempts,
+        maxQuestionsPerSession: q.max_questions_per_session,
         shuffleQuestions: q.shuffle_questions,
         shuffleAnswers: q.shuffle_answers,
         createdBy: q.created_by,
@@ -247,6 +248,7 @@ app.get('/api/quizzes/:id', async (req, res) => {
       timeLimit: quiz.time_limit,
       passingScore: quiz.passing_score,
       maxAttempts: quiz.max_attempts,
+      maxQuestionsPerSession: quiz.max_questions_per_session,
       shuffleQuestions: quiz.shuffle_questions,
       shuffleAnswers: quiz.shuffle_answers,
       createdBy: quiz.created_by,
@@ -268,7 +270,7 @@ app.get('/api/quizzes/:id', async (req, res) => {
 
 // Create Custom Quiz
 app.post('/api/quizzes/create', async (req, res) => {
-  const { id, title, description, category, difficulty, timeLimit, passingScore, maxAttempts, shuffleQuestions, shuffleAnswers, createdBy, questions, isPublic } = req.body;
+  const { id, title, description, category, difficulty, timeLimit, passingScore, maxAttempts, maxQuestionsPerSession, shuffleQuestions, shuffleAnswers, createdBy, questions, isPublic } = req.body;
   
   if (!id || !title || !questions || !Array.isArray(questions)) {
     return res.status(400).json({ error: 'Invalid quiz payload.' });
@@ -280,9 +282,9 @@ app.post('/api/quizzes/create', async (req, res) => {
     
     // Insert Quiz
     await client.query(
-      `INSERT INTO quizzes (id, title, description, category, difficulty, time_limit, passing_score, max_attempts, shuffle_questions, shuffle_answers, created_by, is_public)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-      [id, title, description, category, difficulty, timeLimit || 30, passingScore || 50, maxAttempts || 0, shuffleQuestions !== false, shuffleAnswers !== false, createdBy || null, isPublic !== false]
+      `INSERT INTO quizzes (id, title, description, category, difficulty, time_limit, passing_score, max_attempts, max_questions_per_session, shuffle_questions, shuffle_answers, created_by, is_public)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [id, title, description, category, difficulty, timeLimit || 30, passingScore || 50, maxAttempts || 0, maxQuestionsPerSession || 0, shuffleQuestions !== false, shuffleAnswers !== false, createdBy || null, isPublic !== false]
     );
     
     // Insert Questions
