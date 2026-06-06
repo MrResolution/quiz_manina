@@ -1189,6 +1189,12 @@ async function finishQuiz() {
   const passingScore = quiz.passingScore || 50;
   const passed = accuracyPct >= passingScore;
 
+  // Prevent XP farming: 0 XP if they have taken this quiz before
+  const hasTakenBefore = state.attemptHistory.some(a => a.quizId === quiz.id || a.quiz_id === quiz.id);
+  if (hasTakenBefore) {
+    gameplay.score = 0;
+  }
+
   try {
     // 1. Update XP on database
     await fetch(`/api/users/${state.user.username}/update-xp`, {
