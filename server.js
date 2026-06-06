@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const { Pool, neonConfig } = require('@neondatabase/serverless');
-const ws = require('ws');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
@@ -10,16 +9,21 @@ const fs = require('fs');
 const app = express();
 const PORT = 8080;
 
-// Configure Neon serverless to use ws for WebSockets in Node environment
-neonConfig.webSocketConstructor = ws;
-
-// PostgreSQL Connection Pool Configuration
+// PostgreSQL Connection Pool Configuration using native pg for faster TCP connections
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_qb7sAUvSVt0e@ep-floral-mouse-aohyrhki-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+  connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_qb7sAUvSVt0e@ep-floral-mouse-aohyrhki-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require',
   ssl: {
     rejectUnauthorized: false
-  }
+  },
+  max: 20, // max connections
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
+
+// Prevent Neon DB from sleeping (cold start prevention)
+setInterval(() => {
+  pool.query('SELECT 1').catch(err => console.error('Keep-alive error:', err.message));
+}, 1000 * 60 * 3); // Ping every 3 minutes
 
 // Middleware
 app.use(express.json());
