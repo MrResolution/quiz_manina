@@ -565,8 +565,8 @@
         <div class="full-width-panel glass">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
             <div>
-              <h1 class="text-gradient">Attempt History</h1>
-              <p>Track your past quiz attempts with scores, timestamps, and pass/fail status.</p>
+              <h1 class="text-gradient" id="history-page-title">Attempt History</h1>
+              <p id="history-page-desc">Track your past quiz attempts with scores, timestamps, and pass/fail status.</p>
             </div>
             <button class="btn btn-secondary" style="width: auto;" id="clear-history-btn">
               <i data-lucide="trash-2"></i> Clear History
@@ -575,7 +575,7 @@
 
           <div class="table-wrapper">
             <table class="history-table">
-              <thead>
+              <thead id="history-table-head">
                 <tr>
                   <th>Quiz Title</th>
                   <th>Category</th>
@@ -766,6 +766,41 @@
         <button class="btn-icon" id="share-copy-btn" data-tooltip="Copy to clipboard"><i data-lucide="copy" size="18"></i></button>
       </div>
       <p style="font-size: 12px; color: var(--text-muted); margin-top: 12px;">Note: Quiz data is embedded in the URL so the recipient doesn't need an account.</p>
+    </div>
+  </div>
+
+  <!-- TEACHER QUIZ REPORT MODAL -->
+  <div class="modal-overlay" id="quiz-report-modal">
+    <div class="modal-box glass" style="max-width: 800px; width: 90%;">
+      <div class="modal-header">
+        <h2 id="report-modal-title">Quiz Report</h2>
+        <button class="modal-close-btn" id="report-modal-close"><i data-lucide="x" size="20"></i></button>
+      </div>
+      <p style="margin-bottom: 16px;">Detailed view of all student attempts for this quiz.</p>
+      
+      <div class="table-wrapper">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Student Name</th>
+              <th>Score (XP)</th>
+              <th>Accuracy</th>
+              <th>Status</th>
+              <th>Time Taken</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="report-table-body">
+            <!-- Dynamically Populated -->
+          </tbody>
+        </table>
+      </div>
+      <div id="report-empty-state" style="display: none; text-align: center; padding: 30px;">
+        <p>No attempts recorded for this quiz yet.</p>
+      </div>
+      <div style="display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end;">
+        <button class="btn btn-secondary" style="width: auto;" id="report-modal-download"><i data-lucide="download"></i> Download CSV</button>
+      </div>
     </div>
   </div>
 

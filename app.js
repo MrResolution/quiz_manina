@@ -1827,10 +1827,97 @@ function showToast(message, type = "info") {
 }
 
 // --- ATTEMPT HISTORY PERSISTENCE ---
-function loadAttemptHistory() {
+async function loadAttemptHistory() {
   const raw = localStorage.getItem("quizmania_attempt_history");
   if (raw) {
     try { state.attemptHistory = JSON.parse(raw); } catch (e) { state.attemptHistory = []; }
+  }
+
+  // Confirmation Protocol: Check if data between frontend and backend is synced
+  if (state.user && state.user.username) {
+    try {
+      const res = await fetch(`/api/attempts/history/${encodeURIComponent(state.user.username)}`);
+      if (res.ok) {
+        const serverHistoryRaw = await res.json();
+        
+        const serverHistory = serverHistoryRaw.map(a => ({
+          id: a.id,
+          quizId: a.quiz_id,
+          quizTitle: a.quiz_title,
+          category: a.quiz_category,
+          score: a.score,
+          correctCount: a.correct_count,
+          totalQuestions: a.total_questions,
+          accuracyPct: a.accuracy_pct,
+          passed: a.passed,
+          maxStreak: a.max_streak,
+          timeTaken: a.time_taken,
+          timestamp: a.timestamp
+        }));
+
+        // Detect unsynced offline attempts (they won't have a database ID)
+        const localOnly = state.attemptHistory.filter(localAttempt => !localAttempt.id);
+
+        if (localOnly.length > 0) {
+          console.log(`Confirmation Protocol: Found ${localOnly.length} unsynced offline attempts. Pushing to backend...`);
+          for (let attempt of localOnly) {
+            await fetch('/api/attempts/log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: state.user.username,
+                quizId: attempt.quizId,
+                score: attempt.score,
+                correctCount: attempt.correctCount,
+                totalQuestions: attempt.totalQuestions,
+                accuracyPct: attempt.accuracyPct,
+                passed: attempt.passed,
+                maxStreak: attempt.maxStreak,
+                timeTaken: attempt.timeTaken,
+                answersLog: attempt.answersLog || []
+              })
+            });
+            // Update XP for each local attempt that wasn't synced
+            await fetch(`/api/users/${state.user.username}/update-xp`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ xp: attempt.score })
+            });
+          }
+          
+          // Refresh profile after syncing XP
+          await loadUserProfile();
+          
+          // Re-fetch after syncing all
+          const finalRes = await fetch(`/api/attempts/history/${encodeURIComponent(state.user.username)}`);
+          if (finalRes.ok) {
+             const finalRaw = await finalRes.json();
+             state.attemptHistory = finalRaw.map(a => ({
+                id: a.id,
+                quizId: a.quiz_id,
+                quizTitle: a.quiz_title,
+                category: a.quiz_category,
+                score: a.score,
+                correctCount: a.correct_count,
+                totalQuestions: a.total_questions,
+                accuracyPct: a.accuracy_pct,
+                passed: a.passed,
+                maxStreak: a.max_streak,
+                timeTaken: a.time_taken,
+                timestamp: a.timestamp
+             }));
+          }
+        } else {
+          // No unsynced attempts, frontend adopts server as source of truth
+          state.attemptHistory = serverHistory;
+        }
+        
+        saveAttemptHistory();
+        console.log("Confirmation Protocol: Frontend data successfully synced with backend.");
+      }
+    } catch (err) {
+      console.warn("Confirmation Protocol Error: Could not sync with backend, using local attempt history.", err);
+    }
   }
 }
 
@@ -1841,32 +1928,94 @@ function saveAttemptHistory() {
 function renderAttemptHistory() {
   const tbody = document.getElementById("history-table-body");
   const empty = document.getElementById("history-empty-state");
+  const thead = document.getElementById("history-table-head");
+  const pageTitle = document.getElementById("history-page-title");
+  const pageDesc = document.getElementById("history-page-desc");
+  const clearBtn = document.getElementById("clear-history-btn");
   tbody.innerHTML = "";
 
-  if (state.attemptHistory.length === 0) {
-    empty.style.display = "block";
-    tbody.parentElement.style.display = "none";
-    return;
-  }
-
-  empty.style.display = "none";
-  tbody.parentElement.style.display = "table";
-
-  state.attemptHistory.forEach(a => {
-    const tr = document.createElement("tr");
-    const date = new Date(a.timestamp);
-    const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (state.user && state.user.role === 'teacher') {
+    pageTitle.textContent = "Created Quizzes History";
+    pageDesc.textContent = "View details and download reports of all student attempts for your quizzes.";
+    clearBtn.style.display = "none";
     
-    tr.innerHTML = `
-      <td style="font-weight: 600;">${a.quizTitle}</td>
-      <td><span class="quiz-category">${a.category}</span></td>
-      <td style="font-weight: 700; color: var(--accent-blue);">+${a.score} XP</td>
-      <td>${a.accuracyPct}% (${a.correctCount}/${a.totalQuestions})</td>
-      <td><span class="review-badge ${a.passed ? 'correct' : 'incorrect'}">${a.passed ? 'PASSED' : 'FAILED'}</span></td>
-      <td style="color: var(--text-muted);">${dateStr}</td>
+    thead.innerHTML = `
+      <tr>
+        <th>Quiz Title</th>
+        <th>Category</th>
+        <th>Difficulty</th>
+        <th>Time Limit</th>
+        <th>Max Points</th>
+        <th>Action</th>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+
+    if (!state.quizzes || state.quizzes.length === 0) {
+      empty.style.display = "block";
+      empty.innerHTML = `<div style="font-size: 48px; margin-bottom: 16px;">📋</div><h3 style="margin-bottom: 8px;">No Quizzes Created</h3><p>Create a quiz to see its history here.</p>`;
+      tbody.parentElement.style.display = "none";
+      return;
+    }
+
+    empty.style.display = "none";
+    tbody.parentElement.style.display = "table";
+
+    state.quizzes.forEach(q => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td style="font-weight: 600;">${q.title}</td>
+        <td><span class="quiz-category">${q.category}</span></td>
+        <td>${q.difficulty}</td>
+        <td>${q.timeLimit}s / q</td>
+        <td>${q.questions.length * 10} XP</td>
+        <td><button class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;" onclick="openTeacherReport('${q.id}', '${q.title.replace(/'/g, "\\'")}')">View Report</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    
+  } else {
+    // Student View
+    pageTitle.textContent = "Attempt History";
+    pageDesc.textContent = "Track your past quiz attempts with scores, timestamps, and pass/fail status.";
+    clearBtn.style.display = "inline-flex";
+
+    thead.innerHTML = `
+      <tr>
+        <th>Quiz Title</th>
+        <th>Category</th>
+        <th>Score</th>
+        <th>Accuracy</th>
+        <th>Result</th>
+        <th>Date & Time</th>
+      </tr>
+    `;
+
+    if (state.attemptHistory.length === 0) {
+      empty.style.display = "block";
+      empty.innerHTML = `<div style="font-size: 48px; margin-bottom: 16px;">📋</div><h3 style="margin-bottom: 8px;">No Attempts Yet</h3><p>Complete a quiz to see your history here.</p>`;
+      tbody.parentElement.style.display = "none";
+      return;
+    }
+
+    empty.style.display = "none";
+    tbody.parentElement.style.display = "table";
+
+    state.attemptHistory.forEach(a => {
+      const tr = document.createElement("tr");
+      const date = new Date(a.timestamp);
+      const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      tr.innerHTML = `
+        <td style="font-weight: 600;">${a.quizTitle}</td>
+        <td><span class="quiz-category">${a.category}</span></td>
+        <td style="font-weight: 700; color: var(--accent-blue);">+${a.score} XP</td>
+        <td>${a.accuracyPct}% (${a.correctCount}/${a.totalQuestions})</td>
+        <td><span class="review-badge ${a.passed ? 'correct' : 'incorrect'}">${a.passed ? 'PASSED' : 'FAILED'}</span></td>
+        <td style="color: var(--text-muted);">${dateStr}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
 }
 
 function setupHistoryHandlers() {
@@ -1878,6 +2027,83 @@ function setupHistoryHandlers() {
       showToast("Attempt history cleared.", "info");
     }
   });
+  
+  const reportModalClose = document.getElementById("report-modal-close");
+  if (reportModalClose) {
+    reportModalClose.addEventListener("click", () => {
+      document.getElementById("quiz-report-modal").classList.remove("active");
+    });
+  }
+  
+  const reportDownloadBtn = document.getElementById("report-modal-download");
+  if (reportDownloadBtn) {
+    reportDownloadBtn.addEventListener("click", downloadTeacherReport);
+  }
+}
+
+let currentReportData = [];
+let currentReportTitle = "";
+
+async function openTeacherReport(quizId, quizTitle) {
+  const modal = document.getElementById("quiz-report-modal");
+  const tbody = document.getElementById("report-table-body");
+  const emptyState = document.getElementById("report-empty-state");
+  document.getElementById("report-modal-title").textContent = `Report: ${quizTitle}`;
+  
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading data...</td></tr>';
+  emptyState.style.display = "none";
+  modal.classList.add("active");
+
+  try {
+    const res = await fetch(`/api/attempts/quiz/${quizId}?username=${encodeURIComponent(state.user.username)}`);
+    if (res.ok) {
+      const attempts = await res.json();
+      currentReportData = attempts;
+      currentReportTitle = quizTitle;
+      
+      tbody.innerHTML = "";
+      if (attempts.length === 0) {
+        emptyState.style.display = "block";
+      } else {
+        attempts.forEach(a => {
+          const tr = document.createElement("tr");
+          const date = new Date(a.timestamp);
+          const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          tr.innerHTML = `
+            <td style="font-weight: 600;">${a.student_name || 'Anonymous'}</td>
+            <td style="font-weight: 700; color: var(--accent-blue);">+${a.score} XP</td>
+            <td>${a.accuracy_pct}%</td>
+            <td><span class="review-badge ${a.passed ? 'correct' : 'incorrect'}">${a.passed ? 'PASSED' : 'FAILED'}</span></td>
+            <td>${a.time_taken || 'N/A'}</td>
+            <td style="color: var(--text-muted);">${dateStr}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+      lucide.createIcons();
+    } else {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--error-color);">Error loading report data.</td></tr>';
+    }
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--error-color);">Error connecting to server.</td></tr>';
+  }
+}
+
+function downloadTeacherReport() {
+  if (!currentReportData || currentReportData.length === 0) {
+    showToast("No data to export.", "warning");
+    return;
+  }
+  let csv = "Student Name,Score (XP),Accuracy (%),Result,Time Taken,Date\\n";
+  currentReportData.forEach(a => {
+    const date = new Date(a.timestamp).toLocaleString();
+    const result = a.passed ? "PASSED" : "FAILED";
+    csv += `"${a.student_name || 'Anonymous'}","${a.score}","${a.accuracy_pct}","${result}","${a.time_taken || 'N/A'}","${date}"\\n`;
+  });
+  
+  const safeTitle = currentReportTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  downloadFile(`${safeTitle}_report.csv`, csv, "text/csv");
+  showToast("Report exported successfully.", "success");
 }
 
 let analyticsRequestSeq = 0;
@@ -1892,7 +2118,12 @@ async function renderAnalyticsDashboard() {
   hardestList.innerHTML = "";
 
   try {
-    const res = await fetch('/api/analytics');
+    const queryParams = new URLSearchParams();
+    if (state.user) {
+      queryParams.append('username', state.user.username);
+      queryParams.append('role', state.user.role);
+    }
+    const res = await fetch(`/api/analytics?${queryParams.toString()}`);
     if (currentSeq !== analyticsRequestSeq) return;
 
     if (res.ok) {

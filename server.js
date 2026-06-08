@@ -199,9 +199,9 @@ app.get('/api/quizzes', async (req, res) => {
   try {
     let quizzesResult;
     if (role === 'teacher') {
-      // Teachers see all public quizzes + their own private quizzes
+      // Teachers only see their own quizzes
       quizzesResult = await pool.query(
-        'SELECT * FROM quizzes WHERE is_public = TRUE OR is_public IS NULL OR created_by = $1 ORDER BY created_at DESC',
+        'SELECT * FROM quizzes WHERE created_by = $1 ORDER BY created_at DESC',
         [username]
       );
     } else if (username) {
@@ -468,30 +468,85 @@ app.get('/api/attempts/history/:username', async (req, res) => {
   }
 });
 
+// Get Quiz Attempts (for Teacher Report)
+app.get('/api/attempts/quiz/:quizId', async (req, res) => {
+  const { quizId } = req.params;
+  const { username } = req.query; // Used to verify ownership
+  try {
+    const quizCheck = await pool.query('SELECT created_by FROM quizzes WHERE id = $1', [quizId]);
+    if (quizCheck.rows.length === 0 || quizCheck.rows[0].created_by !== username) {
+      return res.status(403).json({ error: 'Unauthorized to view these records.' });
+    }
+
+    const attemptsResult = await pool.query(
+      `SELECT a.*, q.title as quiz_title
+       FROM attempts a 
+       JOIN quizzes q ON a.quiz_id = q.id
+       WHERE a.quiz_id = $1 
+       ORDER BY a.score DESC, a.accuracy_pct DESC, a.timestamp DESC`,
+      [quizId]
+    );
+    res.json(attemptsResult.rows);
+  } catch (error) {
+    console.error('Error fetching quiz attempts:', error);
+    res.status(500).json({ error: 'Server error fetching quiz attempts.' });
+  }
+});
+
 // Get Analytics Summary & Hardest Questions
 app.get('/api/analytics', async (req, res) => {
+  const { username, role } = req.query;
   try {
-    // General stats
-    const statsResult = await pool.query(`
-      SELECT 
-        COUNT(*)::int as total_attempts,
-        ROUND(COALESCE(AVG(accuracy_pct), 0))::int as avg_accuracy,
-        ROUND(COALESCE(SUM(CASE WHEN passed THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 0))::int as pass_rate
-      FROM attempts
-    `);
+    let statsResult, hardestResult;
     
-    // Hardest questions: Group by question text, success rate is ratio of is_correct = true
-    const hardestResult = await pool.query(`
-      SELECT 
-        question, 
-        COUNT(*)::int as total_answers, 
-        SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)::int as correct_answers,
-        ROUND(SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)::numeric / COUNT(*) * 100)::int as success_rate
-      FROM answers_log 
-      GROUP BY question 
-      ORDER BY success_rate ASC, total_answers DESC 
-      LIMIT 5
-    `);
+    if (role === 'teacher') {
+      statsResult = await pool.query(`
+        SELECT 
+          COUNT(*)::int as total_attempts,
+          ROUND(COALESCE(AVG(accuracy_pct), 0))::int as avg_accuracy,
+          ROUND(COALESCE(SUM(CASE WHEN passed THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 0))::int as pass_rate
+        FROM attempts a
+        JOIN quizzes q ON a.quiz_id = q.id
+        WHERE q.created_by = $1
+      `, [username]);
+      
+      hardestResult = await pool.query(`
+        SELECT 
+          l.question, 
+          COUNT(*)::int as total_answers, 
+          SUM(CASE WHEN l.is_correct THEN 1 ELSE 0 END)::int as correct_answers,
+          ROUND(SUM(CASE WHEN l.is_correct THEN 1 ELSE 0 END)::numeric / COUNT(*) * 100)::int as success_rate
+        FROM answers_log l
+        JOIN attempts a ON l.attempt_id = a.id
+        JOIN quizzes q ON a.quiz_id = q.id
+        WHERE q.created_by = $1
+        GROUP BY l.question 
+        ORDER BY success_rate ASC, total_answers DESC 
+        LIMIT 5
+      `, [username]);
+    } else {
+      // General stats
+      statsResult = await pool.query(`
+        SELECT 
+          COUNT(*)::int as total_attempts,
+          ROUND(COALESCE(AVG(accuracy_pct), 0))::int as avg_accuracy,
+          ROUND(COALESCE(SUM(CASE WHEN passed THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 0))::int as pass_rate
+        FROM attempts
+      `);
+      
+      // Hardest questions: Group by question text, success rate is ratio of is_correct = true
+      hardestResult = await pool.query(`
+        SELECT 
+          question, 
+          COUNT(*)::int as total_answers, 
+          SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)::int as correct_answers,
+          ROUND(SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)::numeric / COUNT(*) * 100)::int as success_rate
+        FROM answers_log 
+        GROUP BY question 
+        ORDER BY success_rate ASC, total_answers DESC 
+        LIMIT 5
+      `);
+    }
     
     res.json({
       stats: statsResult.rows[0] || { total_attempts: 0, avg_accuracy: 0, pass_rate: 0 },
