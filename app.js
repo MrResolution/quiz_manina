@@ -622,13 +622,6 @@ function renderDashboard() {
       const title = quiz ? quiz.title : "this quiz";
       
       if (confirm(`Are you sure you want to permanently delete "${title}"? This cannot be undone.`)) {
-        if (quizId.startsWith('custom-')) {
-          state.quizzes = state.quizzes.filter(q => q.id !== quizId);
-          showToast("Quiz deleted successfully!", "success");
-          renderDashboard();
-          return;
-        }
-
         try {
           const res = await fetch(`/api/quizzes/${quizId}?username=${encodeURIComponent(state.user.username)}`, {
             method: 'DELETE'
