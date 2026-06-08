@@ -2062,7 +2062,7 @@ async function openTeacherReport(quizId, quizTitle) {
           const date = new Date(a.timestamp);
           const dateStr = date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           tr.innerHTML = `
-            <td style="font-weight: 600;">${a.student_name || 'Anonymous'}</td>
+            <td style="font-weight: 600;">${a.username || 'Anonymous'}</td>
             <td style="font-weight: 700; color: var(--accent-blue);">+${a.score} XP</td>
             <td>${a.accuracy_pct}%</td>
             <td><span class="review-badge ${a.passed ? 'correct' : 'incorrect'}">${a.passed ? 'PASSED' : 'FAILED'}</span></td>
@@ -2090,7 +2090,7 @@ function downloadTeacherReport() {
   currentReportData.forEach(a => {
     const date = new Date(a.timestamp).toLocaleString();
     const result = a.passed ? "PASSED" : "FAILED";
-    csv += `"${a.student_name || 'Anonymous'}","${a.score}","${a.accuracy_pct}","${result}","${a.time_taken || 'N/A'}","${date}"\\n`;
+    csv += `"${a.username || 'Anonymous'}","${a.score}","${a.accuracy_pct}","${result}","${a.time_taken || 'N/A'}","${date}"\\n`;
   });
   
   const safeTitle = currentReportTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
