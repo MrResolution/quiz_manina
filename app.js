@@ -1529,7 +1529,7 @@ function setupQuizCreatorHandlers() {
     }
   });
 
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     
     // Gather Meta
@@ -1622,8 +1622,7 @@ function setupQuizCreatorHandlers() {
       questions: parsedQuestions
     };
 
-    saveCustomQuiz(newQuiz);
-    showToast(`'${title}' has been published to your Dashboard!`, "success");
+    await saveCustomQuiz(newQuiz);
     
     // Reset and return
     resetCreator();
